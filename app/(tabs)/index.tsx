@@ -1,5 +1,5 @@
-import { BookOpen, Car, ChartLine, DollarSign, Heart, MessageSquareText, Plus, Utensils, Wallet, X } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import { BookOpen, Car, ChartLine, DollarSign, Heart, MessageSquareText, Utensils, Wallet, X } from 'lucide-react-native';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platform, SafeAreaView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTransactions } from '../../hooks/useTransactions';
@@ -21,7 +21,7 @@ const Dashboard = () => {
   const params = useLocalSearchParams();
   
   useEffect(() => {
-    if (params.openModal === 'true') {
+    if (params.openModal) {
       setModalVisible(true);
     }
   }, [params.openModal]);
@@ -30,13 +30,34 @@ const Dashboard = () => {
   const { fetchTransactions, fetchCategories, addTransaction } = useTransactions();
   const { data: transactions, isLoading, isError } = fetchTransactions;
   const { data: categories } = fetchCategories; // 拿取類別資料
-  
   // --- 表單狀態管理 ---
   const [isModalVisible, setModalVisible] = useState(false);
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [type, setType] = useState<'expense' | 'income'>('expense');
+
+
+  // ==========================================
+  // 🌟 新增：動態計算預算邏輯
+  // ==========================================
+  const TARGET_BUDGET = 3500.00; // 你的每月目標預算
+
+  // 計算總支出 (使用 useMemo 確保只有當 transactions 改變時才重新計算)
+  const currentMonthExpenses = useMemo(() => {
+    if (!transactions) return 0;
+
+    return transactions.reduce((total, tx) => {
+      // 確保只加總「支出 (expense)」類別的金額
+      if (tx.category?.type === 'expense') {
+        return total + tx.amount;
+      }
+      return total;
+    }, 0);
+  }, [transactions]);
+
+  // 計算進度條百分比 (最高不超過 100%)
+  const progressPercentage = Math.min((currentMonthExpenses / TARGET_BUDGET) * 100, 100).toFixed(0);
 
   // --- 送出表單邏輯 ---
   const handleSaveTransaction = async () => {
@@ -46,16 +67,14 @@ const Dashboard = () => {
     }
 
     try {
-      // 呼叫 addTransaction (注意：這裡暫時寫死 user_id，下方會解釋)
       await addTransaction.mutateAsync({
         amount: parseFloat(amount),
         note: note,
         category_id: selectedCategoryId,
-        // ⚠️ 臨時測試用的假 User ID (為了不讓資料庫報錯)
-        // user_id: '你的真實 user_id 會在登入後取得' 
+        date: new Date().toISOString(), // 🌟 新增這行：記錄當下的時間
       });
 
-      // 成功後清空表單並關閉視窗
+      // 成功後清空表單
       setAmount('');
       setNote('');
       setSelectedCategoryId(null);
@@ -86,18 +105,32 @@ const Dashboard = () => {
           </TouchableOpacity>
         </View>
         
+        {/* --- 主核心：預算進度卡片 (Hero Card) --- */}
         <View className="bg-indigo-600 p-6 rounded-3xl mb-7 shadow-xl shadow-indigo-100">
           <View className="flex-row justify-between items-center mb-2">
             <Text className="text-indigo-100 text-sm font-medium">本月總支出</Text>
             <View className="bg-indigo-500/50 px-3 py-1 rounded-full">
-              <Text className="text-white text-xs font-bold">已使用 70%</Text>
+              {/* 🌟 替換為動態百分比 */}
+              <Text className="text-white text-xs font-bold">已使用 {progressPercentage}%</Text>
             </View>
           </View>
-          <Text className="text-white text-4xl font-extrabold mt-1 tracking-tight">RM 2,450.00</Text>
+          
+          {/* 🌟 替換為動態總額 (顯示到小數點後兩位) */}
+          <Text className="text-white text-4xl font-extrabold mt-1 tracking-tight">
+            RM {currentMonthExpenses.toFixed(2)}
+          </Text>
+          
           <View className="mt-5 bg-indigo-300 h-3 rounded-full overflow-hidden">
-            <View className="bg-white h-full w-[70%] rounded-full" />
+            {/* 🌟 這裡最關鍵：使用 inline style 動態控制白色條的寬度！ */}
+            <View 
+              className="bg-white h-full rounded-full" 
+              style={{ width: parseInt(progressPercentage) }} 
+            />
           </View>
-          <Text className="text-indigo-100 text-xs mt-3 font-normal">目標預算: RM 3,500.00</Text>
+          
+          <Text className="text-indigo-100 text-xs mt-3 font-normal">
+            目標預算: RM {TARGET_BUDGET.toFixed(2)}
+          </Text>
         </View>
 
         <View className="flex-row justify-between items-center mb-4">
@@ -127,14 +160,6 @@ const Dashboard = () => {
           )}
         />
       </View>
-
-      {/* ===== 右下角新增按鈕 ===== */}
-      <TouchableOpacity 
-        className="absolute bottom-8 right-8 bg-indigo-600 w-16 h-16 rounded-full flex justify-center items-center shadow-2xl shadow-indigo-200 active:bg-indigo-700 z-10"
-        onPress={() => setModalVisible(true)}
-      >
-        <Plus size={32} color="white" strokeWidth={3} />
-      </TouchableOpacity>
 
       {/* ===== 新增交易的彈跳視窗 (Modal) ===== */}
       <Modal
