@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { History, Home, LayoutGrid, Plus, UserCircle } from 'lucide-react-native';
+import { History, Home, Landmark, LayoutGrid, Plus, UserCircle } from 'lucide-react-native';
 import React from 'react';
 import { Platform, View } from 'react-native';
 
@@ -30,12 +30,12 @@ export default function TabLayout() {
         }}
       />
 
-      {/* 2. 歷史記錄 */}
+      {/* 🌟 2. 將原本的歷史記錄換成全新的「儲蓄複利」分頁 */}
       <Tabs.Screen
-        name="history"
+        name="savings"
         options={{
-          title: '記錄',
-          tabBarIcon: ({ color }) => <History size={24} color={color} />,
+          title: '儲蓄',
+          tabBarIcon: ({ color }) => <Landmark size={24} color={color} />,
         }}
       />
 
