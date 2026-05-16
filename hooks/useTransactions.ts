@@ -63,7 +63,7 @@ export const useTransactions = () => {
 
   // 4. 刪除交易
   const deleteTransaction = useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async (id: number) => {
       const { error } = await supabase.from('transactions').delete().eq('id', id);
       if (error) throw error;
     },
@@ -76,7 +76,7 @@ export const useTransactions = () => {
   // 🌟 5. 新增：修改交易
   // ==========================================
   const updateTransaction = useMutation({
-    mutationFn: async (updatedTx: Partial<Transaction> & { id: string }) => {
+    mutationFn: async (updatedTx: Partial<Transaction> & { id: number }) => {
       const { id, ...fields } = updatedTx;
       const { data, error } = await supabase
         .from('transactions')

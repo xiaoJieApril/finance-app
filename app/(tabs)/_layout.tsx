@@ -1,81 +1,87 @@
-import { Tabs } from 'expo-router';
-import { History, Home, Landmark, LayoutGrid, Plus, UserCircle } from 'lucide-react-native';
 import React from 'react';
-import { Platform, View } from 'react-native';
+import { Tabs } from 'expo-router';
+import { Home, History, Plus, LayoutGrid, BarChart3 } from 'lucide-react-native';
+import { View, Platform } from 'react-native';
 
 export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#4f46e5', // 點擊時的紫色
-        tabBarInactiveTintColor: '#94a3b8', // 未點擊的灰色
+        tabBarActiveTintColor: '#4f46e5', // 點擊時的高級紫色
+        tabBarInactiveTintColor: '#94a3b8', // 未點擊的洗鍊灰
         tabBarStyle: {
-          height: Platform.OS === 'web' ? 70 : 85, // Web 版微調高度避免裁切
-          paddingBottom: Platform.OS === 'web' ? 0 : 25,
-          paddingTop: 10,
+          height: Platform.OS === 'web' ? 70 : 88, 
+          paddingBottom: Platform.OS === 'web' ? 0 : 28,
+          paddingTop: 12,
           backgroundColor: 'white',
-          borderTopWidth: 1,
-          borderTopColor: '#f8fafc',
-          elevation: 0, // 移除 Android 預設陰影
+          borderTopWidth: 0, // 徹底移除死板的邊框黑線
+          // 加上極具洗鍊感的無邊框懸浮微陰影
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -6 },
+          shadowOpacity: 0.03,
+          shadowRadius: 16,
+          elevation: 10, 
         },
         headerShown: false,
       }}
     >
-      {/* 1. 主頁 */}
+      {/* 1. 最左側：錢包主頁 */}
       <Tabs.Screen
         name="index"
         options={{
           title: '主頁',
-          tabBarIcon: ({ color }) => <Home size={24} color={color} />,
+          tabBarIcon: ({ color }) => <Home size={22} color={color} />,
         }}
       />
 
-      {/* 🌟 2. 將原本的歷史記錄換成全新的「儲蓄複利」分頁 */}
+      {/* 2. 左二：全歷史記錄流水 */}
       <Tabs.Screen
-        name="savings"
+        name="history"
         options={{
-          title: '儲蓄',
-          tabBarIcon: ({ color }) => <Landmark size={24} color={color} />,
+          title: '歷史記錄',
+          tabBarIcon: ({ color }) => <History size={22} color={color} />,
         }}
       />
 
-      {/* 3. 🌟 核心：中間的凸起加號按鈕 */}
+      {/* 3. 🌟 正中間：凸起立體加號按鈕 */}
       <Tabs.Screen
         name="add_transaction"
         options={{
-          title: '', // 不顯示文字
+          title: '', 
           tabBarIcon: () => (
-            <View className="bg-indigo-600 w-14 h-14 rounded-full justify-center items-center -mt-7 shadow-lg shadow-indigo-300">
-              <Plus size={32} color="white" strokeWidth={3} />
+            <View className="bg-indigo-600 w-14 h-14 rounded-full justify-center items-center -mt-8 shadow-xl shadow-indigo-300 border-4 border-white">
+              <Plus size={28} color="white" strokeWidth={3} />
             </View>
           ),
         }}
         listeners={({ navigation }) => ({
           tabPress: (e) => {
-            e.preventDefault(); // 阻止跳轉到空殼頁面
-            // 觸發首頁的 useEffect 來打開彈跳視窗
+            e.preventDefault(); 
             navigation.navigate('index', { openModal: Date.now().toString() }); 
           },
         })}
       />
 
-      {/* 4. 類別 */}
+      {/* 4. 右二：交易類別控管 */}
       <Tabs.Screen
         name="categories"
         options={{
-          title: '類別',
-          tabBarIcon: ({ color }) => <LayoutGrid size={24} color={color} />,
+          title: '交易類別',
+          tabBarIcon: ({ color }) => <LayoutGrid size={22} color={color} />,
         }}
       />
-      
-      {/* 5. 個人 */}
+
+      {/* 5. 最右側：儲蓄計畫 ＋ 本月分析圖表 (雙效合一) */}
       <Tabs.Screen
-        name="profile"
+        name="savings"
         options={{
-          title: '個人',
-          tabBarIcon: ({ color }) => <UserCircle size={24} color={color} />,
+          title: '儲蓄分析',
+          tabBarIcon: ({ color }) => <BarChart3 size={22} color={color} />,
         }}
       />
+
+      {/* 隱藏 profile 的多餘分頁連結路徑，確保路由不衝突 */}
+      <Tabs.Screen name="profile" options={{ href: null }} />
     </Tabs>
   );
 }

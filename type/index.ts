@@ -1,20 +1,20 @@
 export type Transaction = {
-  id: string;
+  id: number; // 🌟 從 string 改為 number
   user_id?: string;
-  category_id?: string;
+  category_id?: number; // 🌟 從 string 改為 number
   amount: number;
   note: string;
   date: string;
   category?: Category;
-  is_savings?: boolean; // 🌟 新增：是否為儲蓄項目
+  is_savings?: boolean;
 };
 
 export type Category = {
-  id: string;
+  id: number; // 🌟 從 string 改為 number
   name: string;
   icon: string;
   type: 'income' | 'expense';
-  budget_limit?: number; // 🌟 新增：該類別的專屬預算上限
+  budget_limit?: number;
 };
 
 export type Budget = {

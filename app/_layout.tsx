@@ -36,21 +36,20 @@ export default function RootLayout() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // 2. 路由守衛核心邏輯
   useEffect(() => {
-    if (!isInitialized) return;
+    // 監聽登入狀態
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      // 🌟 核心修改：當發現用戶完全沒登入時，默默在背景幫他建立一個「匿名訪客通行證」
+      // 這樣他一打開 App 就會直接看到主頁，而且背後已經有了一個 UUID 可以直接記帳！
+      if (!session) {
+        await supabase.auth.signInAnonymously();
+      }
+    });
 
-    // 檢查使用者目前是否正在登入頁面
-    const inAuthGroup = segments[0] === 'login';
-
-    if (session && inAuthGroup) {
-      // 狀況 A：已經登入，但卡在登入頁面 ➡️ 強制帶回首頁
-      router.replace('/');
-    } else if (!session && !inAuthGroup) {
-      // 狀況 B：還沒登入，卻想偷看其他頁面 ➡️ 強制帶去登入頁
-      router.replace('/login');
-    }
-  }, [session, isInitialized, segments]);
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
