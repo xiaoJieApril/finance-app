@@ -29,6 +29,21 @@ export const useTransactions = () => {
     },
   });
 
+  // ==========================================
+  // 🌟 新增：自訂類別功能
+  // ==========================================
+  const addCategory = useMutation({
+    mutationFn: async (newCat: Partial<Category>) => {
+      const { data, error } = await supabase.from('categories').insert([newCat]);
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      // 新增類別後，立刻刷新快取，讓下拉選單與列表即時更新
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
+    },
+  });
+
   // 3. 新增交易
   const addTransaction = useMutation({
     mutationFn: async (newTx: Partial<Transaction>) => {
@@ -48,7 +63,7 @@ export const useTransactions = () => {
 
   // 4. 刪除交易
   const deleteTransaction = useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async (id: number) => {
       const { error } = await supabase.from('transactions').delete().eq('id', id);
       if (error) throw error;
     },
@@ -61,7 +76,7 @@ export const useTransactions = () => {
   // 🌟 5. 新增：修改交易
   // ==========================================
   const updateTransaction = useMutation({
-    mutationFn: async (updatedTx: Partial<Transaction> & { id: string }) => {
+    mutationFn: async (updatedTx: Partial<Transaction> & { id: number }) => {
       const { id, ...fields } = updatedTx;
       const { data, error } = await supabase
         .from('transactions')
@@ -76,5 +91,5 @@ export const useTransactions = () => {
     },
   });
 
-  return { fetchTransactions, fetchCategories, addTransaction, deleteTransaction, updateTransaction };
+  return { fetchTransactions, fetchCategories, addCategory, addTransaction, deleteTransaction, updateTransaction };
 };

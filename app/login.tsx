@@ -1,7 +1,8 @@
 import { Wallet } from 'lucide-react-native';
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, SafeAreaView, Text, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, SafeAreaView, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { supabase } from '../services/supabase'; // 確保有引入 supabase
 
 // 引入剛才建立的模組
 import { CustomButton } from '../components/ui/CustomButton';
@@ -21,6 +22,19 @@ export default function LoginScreen() {
       signInWithEmail(email, password);
     } else {
       signUpWithEmail(email, password);
+    }
+  };
+
+  // 🌟 新增這個訪客登入函數
+  const handleGuestLogin = async () => {
+    try {
+      // 呼叫官方的匿名登入：這會在背景發給你一組虛擬通行證
+      // 你的 Expo Router 守衛會自動偵測到通行證，並直接把你送進主頁！
+      const { error } = await supabase.auth.signInAnonymously();
+      if (error) throw error;
+    } catch (error) {
+      console.error(error);
+      Alert.alert('錯誤', '訪客登入失敗');
     }
   };
 
@@ -75,6 +89,11 @@ export default function LoginScreen() {
             onPress={() => setIsLoginMode(!isLoginMode)}
             disabled={isLoading}
           />
+          
+          <TouchableOpacity 
+            onPress={handleGuestLogin}
+            className="mt-4 py-3 items-center border border-slate-300 rounded-2xl active:bg-slate-50"
+          ></TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>

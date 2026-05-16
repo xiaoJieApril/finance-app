@@ -1,18 +1,20 @@
 export type Transaction = {
-  id: string;
-  user_id?: string;       // 新增：對應 Supabase 的使用者 ID 欄位
-  category_id?: string;   // 新增：對應 Supabase 的類別 ID 欄位
+  id: number; // 🌟 從 string 改為 number
+  user_id?: string;
+  category_id?: number; // 🌟 從 string 改為 number
   amount: number;
   note: string;
   date: string;
-  category?: Category;    // 加上問號 (?) 變為可選，因為我們新增資料時還沒有完整的類別物件
+  category?: Category;
+  is_savings?: boolean;
 };
 
 export type Category = {
-  id: string;
+  id: number; // 🌟 從 string 改為 number
   name: string;
   icon: string;
   type: 'income' | 'expense';
+  budget_limit?: number;
 };
 
 export type Budget = {
