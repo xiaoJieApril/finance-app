@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../services/supabase';
-import { Category, Transaction } from '../type'; // 確保引入了 Category
+import { Category, Transaction } from '../type';
 
 export const useTransactions = () => {
   const queryClient = useQueryClient();
@@ -19,7 +19,7 @@ export const useTransactions = () => {
     },
   });
 
-  // 2. 獲取所有類別 (提供給新增表單選擇用)
+  // 2. 獲取所有類別
   const fetchCategories = useQuery({
     queryKey: ['categories'],
     queryFn: async (): Promise<Category[]> => {
@@ -29,32 +29,52 @@ export const useTransactions = () => {
     },
   });
 
-// 3. 新增交易
-const addTransaction = useMutation({
-  mutationFn: async (newTx: Partial<Transaction>) => {
-    
-    // 🌟 新增這段：向 Supabase 索取目前登入使用者的真實身分
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) throw new Error('尚未登入，無法新增紀錄');
+  // 3. 新增交易
+  const addTransaction = useMutation({
+    mutationFn: async (newTx: Partial<Transaction>) => {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) throw new Error('尚未登入，無法新增紀錄');
 
-    // 🌟 把拿到的真實 user.id 塞進我們要存的資料裡
-    const transactionWithUser = {
-      ...newTx,
-      user_id: user.id, // 綁定你的帳號！
-    };
+      const transactionWithUser = { ...newTx, user_id: user.id };
+      const { data, error } = await supabase.from('transactions').insert([transactionWithUser]);
+        
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    },
+  });
 
-    const { data, error } = await supabase
-      .from('transactions')
-      .insert([transactionWithUser]);
+  // 4. 刪除交易
+  const deleteTransaction = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('transactions').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    },
+  });
+
+  // ==========================================
+  // 🌟 5. 新增：修改交易
+  // ==========================================
+  const updateTransaction = useMutation({
+    mutationFn: async (updatedTx: Partial<Transaction> & { id: string }) => {
+      const { id, ...fields } = updatedTx;
+      const { data, error } = await supabase
+        .from('transactions')
+        .update(fields)
+        .eq('id', id);
       
-    if (error) throw error;
-    return data;
-  },
-  onSuccess: () => {
-    // 成功後，自動重新抓取最新的交易紀錄，讓首頁畫面即時更新
-    queryClient.invalidateQueries({ queryKey: ['transactions'] });
-  },
-});
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    },
+  });
 
-  return { fetchTransactions, fetchCategories, addTransaction };
+  return { fetchTransactions, fetchCategories, addTransaction, deleteTransaction, updateTransaction };
 };
