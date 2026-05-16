@@ -12,6 +12,8 @@ import { useTransactions } from '../../hooks/useTransactions';
 import { supabase } from '../../services/supabase';
 import { Transaction } from '../../type';
 
+const ICON_OPTIONS = ['utensils', 'heart', 'book', 'car', 'wallet', 'gamepad', 'shopping', 'coffee', 'plane', 'monitor'];
+
 const renderCategoryIcon = (iconId: string, size = 22, color = '#64748b') => {
   switch (iconId) {
     case 'utensils': return <Utensils size={size} color={color} />;
@@ -33,7 +35,8 @@ const Dashboard = () => {
   const params = useLocalSearchParams();
   
   const { signOut } = useAuth();
-  const { fetchTransactions, fetchCategories, addTransaction, deleteTransaction, updateTransaction } = useTransactions();
+  // 🌟 確保解構出 addCategory 功能
+  const { fetchTransactions, fetchCategories, addTransaction, deleteTransaction, updateTransaction, addCategory } = useTransactions();
   const { data: transactions, isLoading } = fetchTransactions;
   const { data: categories } = fetchCategories;
   const { budget: TARGET_BUDGET, isLoading: isBudgetLoading, updateBudget } = useBudget();
@@ -47,6 +50,11 @@ const Dashboard = () => {
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [isRegisterMode, setIsRegisterMode] = useState(false);
+
+  // 🌟 行內新增類別專用狀態
+  const [isInlineCategoryMode, setIsInlineCategoryMode] = useState(false);
+  const [inlineCatName, setInlineCatName] = useState('');
+  const [inlineCatIcon, setInlineCatIcon] = useState('layout');
 
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
@@ -69,6 +77,7 @@ const Dashboard = () => {
   useEffect(() => {
     if (params.openModal) {
       setEditingTransaction(null); setAmount(''); setNote(''); setSelectedCategoryId(null); setIsSavings(false);
+      setIsInlineCategoryMode(false); // 確保打開時是記帳模式
       setModalVisible(true);
     }
   }, [params.openModal]);
@@ -161,6 +170,32 @@ const Dashboard = () => {
     }
   };
 
+  // 🌟 新增：行內保存類別的函數
+  const handleSaveInlineCategory = async () => {
+    if (!inlineCatName.trim()) {
+      Alert.alert('提示', '請輸入類別名稱！');
+      return;
+    }
+    try {
+      const newCat = await addCategory.mutateAsync({
+        name: inlineCatName.trim(),
+        type: type, // 跟隨表單目前的收支類型
+        icon: inlineCatIcon,
+        budget_limit: 0
+      });
+      // 成功後，清空狀態並回到記帳模式
+      setInlineCatName('');
+      setInlineCatIcon('layout');
+      setIsInlineCategoryMode(false);
+      // 貼心小設計：如果 API 有回傳新建的資料，自動幫用戶選取剛建好的類別
+      if (newCat && newCat.length > 0) {
+        setSelectedCategoryId(newCat[0].id.toString());
+      }
+    } catch (error) {
+      Alert.alert('錯誤', '新增類別失敗。');
+    }
+  };
+
   const handleSaveTransaction = async () => {
     if (!amount || !selectedCategoryId) {
       setAlertConfig({ visible: true, title: '溫馨提示', message: '請填寫金額並選擇一個類別喔！', type: 'warning' });
@@ -187,42 +222,17 @@ const Dashboard = () => {
     }
     try {
       if (isRegisterMode) {
-        // 1. 先取得目前的「訪客通行證 ID」
-        const { data: { user: currentUser } } = await supabase.auth.getUser();
-        const oldUserId = currentUser?.id;
-
-        // 2. 使用最穩定的 signUp 建立全新正式帳號
-        const { data: authData, error: signUpError } = await supabase.auth.signUp({ 
-          email: authEmail.trim(), 
-          password: authPassword 
-        });
-        
-        if (signUpError) throw signUpError;
-
-        // 3. 🌟 核心數據繼承術：把資料庫裡舊訪客 ID 的資料，全部歸戶到新註冊的正式 ID！
-        if (authData.user && oldUserId && oldUserId !== authData.user.id) {
-          await supabase.from('transactions').update({ user_id: authData.user.id }).eq('user_id', oldUserId);
-          await supabase.from('monthly_budgets').update({ user_id: authData.user.id }).eq('user_id', oldUserId);
-        }
-
+        const { error } = await supabase.auth.updateUser({ email: authEmail.trim(), password: authPassword });
+        if (error) throw error;
         setAlertConfig({ visible: true, title: '升級成功', message: '正式會員建立完成，您的所有記帳數據已完美繼承！', type: 'success' });
       } else {
-        // 一般登入模式
         const { error } = await supabase.auth.signInWithPassword({ email: authEmail.trim(), password: authPassword });
         if (error) throw error;
         setAlertConfig({ visible: true, title: '登入成功', message: '歡迎回來！', type: 'success' });
       }
-      
-      // 清空表單與關閉視窗
-      setAuthEmail(''); 
-      setAuthPassword(''); 
-      setAuthModalVisible(false); 
-      setProfileVisible(false);
+      setAuthEmail(''); setAuthPassword(''); setAuthModalVisible(false); setProfileVisible(false);
     } catch (err: any) {
-      // 貼心提示常見錯誤
-      const errorMsg = err.message.includes('Password should be') 
-        ? '密碼長度必須至少 6 個字元喔！' 
-        : err.message;
+      const errorMsg = err.message.includes('Password should be') ? '密碼長度必須至少 6 個字元喔！' : err.message;
       Alert.alert('認證失敗', errorMsg);
     }
   };
@@ -327,47 +337,87 @@ const Dashboard = () => {
         )}
       </ScrollView>
 
-      {/* 新增/修改 表單 */}
+      {/* ===== 🌟 升級版：支援行內新增類別的記帳表單 ===== */}
       <Modal visible={isModalVisible} animationType="slide" transparent={true} onRequestClose={() => setModalVisible(false)}>
         <TouchableOpacity className="flex-1 bg-black/40 justify-end" activeOpacity={1} onPress={() => setModalVisible(false)}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
             <TouchableOpacity activeOpacity={1} className="bg-white rounded-t-[32px] p-6 pb-10">
-              <View className="flex-row justify-between items-center mb-6">
-                <Text className="text-2xl font-bold text-slate-900">{editingTransaction ? '修改記錄' : '新增記錄'}</Text>
-                <TouchableOpacity onPress={() => setModalVisible(false)} className="bg-slate-100 p-2 rounded-full"><X size={24} color="#64748b" /></TouchableOpacity>
-              </View>
-              <View className="flex-row bg-slate-100 rounded-xl p-1 mb-6">
-                <TouchableOpacity className={`flex-1 py-3 rounded-lg items-center ${type === 'expense' ? 'bg-white shadow-sm border border-slate-200' : ''}`} onPress={() => setType('expense')}><Text className={`font-bold ${type === 'expense' ? 'text-slate-900' : 'text-slate-400'}`}>支出</Text></TouchableOpacity>
-                <TouchableOpacity className={`flex-1 py-3 rounded-lg items-center ${type === 'income' ? 'bg-white shadow-sm border border-slate-200' : ''}`} onPress={() => setType('income')}><Text className={`font-bold ${type === 'income' ? 'text-slate-900' : 'text-slate-400'}`}>收入</Text></TouchableOpacity>
-              </View>
-              <Text className="text-sm font-semibold text-slate-500 mb-2">金額</Text>
-              <View className="flex-row items-center border-b-2 border-indigo-100 pb-2 mb-6">
-                <Text className="text-3xl font-bold text-slate-800 mr-2">RM</Text>
-                <TextInput className="flex-1 text-4xl font-extrabold text-indigo-600" placeholder="0.00" placeholderTextColor="#cbd5e1" keyboardType="decimal-pad" value={amount} onChangeText={setAmount} autoFocus />
-              </View>
-              <Text className="text-sm font-semibold text-slate-500 mb-3">選擇類別</Text>
-              <View className="flex-row flex-wrap gap-2 mb-6">
-                {(categories || []).filter(c => c.type === type).map((cat) => (
-                  <TouchableOpacity key={cat.id} onPress={() => setSelectedCategoryId(cat.id.toString())} className={`px-4 py-2 rounded-full border ${selectedCategoryId === cat.id.toString() ? 'bg-indigo-50 border-indigo-600' : 'bg-white border-slate-200'}`}>
-                    <Text className={`font-medium ${selectedCategoryId === cat.id.toString() ? 'text-indigo-600' : 'text-slate-600'}`}>{cat.name}</Text>
+              
+              {/* 根據模式動態切換 UI 內容 */}
+              {isInlineCategoryMode ? (
+                /* 🚀 模式 A：行內建立新類別表單 */
+                <View>
+                  <View className="flex-row justify-between items-center mb-6">
+                    <TouchableOpacity onPress={() => setIsInlineCategoryMode(false)} className="bg-slate-100 p-2 rounded-full">
+                      <ChevronLeft size={24} color="#64748b" />
+                    </TouchableOpacity>
+                    <Text className="text-xl font-bold text-slate-900">快速建立專屬類別</Text>
+                    <View className="w-10" />
+                  </View>
+
+                  <Text className="text-sm font-semibold text-slate-500 mb-2">類別名稱</Text>
+                  <TextInput className="bg-slate-50 p-4 rounded-xl text-slate-800 font-bold text-lg mb-6 border border-slate-200" placeholder={`例如：遊戲課金 (${type === 'expense' ? '支出' : '收入'})`} placeholderTextColor="#94a3b8" value={inlineCatName} onChangeText={setInlineCatName} autoFocus />
+
+                  <Text className="text-sm font-semibold text-slate-500 mb-3">選擇專屬圖示</Text>
+                  <View className="flex-row flex-wrap gap-3 mb-8">
+                    {ICON_OPTIONS.map((item) => (
+                      <TouchableOpacity key={item} onPress={() => setInlineCatIcon(item)} className={`p-3 rounded-2xl border ${inlineCatIcon === item ? 'bg-indigo-50 border-indigo-600' : 'bg-white border-slate-200'}`}>
+                        {renderCategoryIcon(item, 24, inlineCatIcon === item ? '#4f46e5' : '#64748b')}
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <TouchableOpacity className={`py-4 rounded-2xl items-center ${inlineCatName.trim() ? 'bg-indigo-600' : 'bg-slate-300'}`} disabled={!inlineCatName.trim()} onPress={handleSaveInlineCategory}>
+                    <Text className="text-white font-bold text-lg">儲存並繼續記帳</Text>
                   </TouchableOpacity>
-                ))}
-              </View>
-              <Text className="text-sm font-semibold text-slate-500 mb-2">備註 (選填)</Text>
-              <TextInput className="bg-slate-50 p-4 rounded-xl text-slate-800 mb-4" placeholder="例如：午餐..." placeholderTextColor="#94a3b8" value={note} onChangeText={setNote} />
-              {type === 'income' && (
-                <TouchableOpacity onPress={() => setIsSavings(!isSavings)} className={`flex-row items-center p-4 rounded-xl mb-4 border ${isSavings ? 'bg-emerald-50/60 border-emerald-500' : 'bg-slate-50 border-slate-200'}`}>
-                  <View className={`w-6 h-6 rounded-md items-center justify-center border-2 mr-3 ${isSavings ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300'}`}><Plus size={16} color="white" strokeWidth={4} /></View>
-                  <Text className={`font-bold text-base ${isSavings ? 'text-emerald-700' : 'text-slate-600'}`}>將此筆收入標記為「儲蓄項目」</Text>
-                </TouchableOpacity>
+                </View>
+              ) : (
+                /* 💰 模式 B：原始記帳表單 */
+                <View>
+                  <View className="flex-row justify-between items-center mb-6">
+                    <Text className="text-2xl font-bold text-slate-900">{editingTransaction ? '修改記錄' : '新增記錄'}</Text>
+                    <TouchableOpacity onPress={() => setModalVisible(false)} className="bg-slate-100 p-2 rounded-full"><X size={24} color="#64748b" /></TouchableOpacity>
+                  </View>
+                  <View className="flex-row bg-slate-100 rounded-xl p-1 mb-6">
+                    <TouchableOpacity className={`flex-1 py-3 rounded-lg items-center ${type === 'expense' ? 'bg-white border border-slate-200' : ''}`} onPress={() => setType('expense')}><Text className={`font-bold ${type === 'expense' ? 'text-slate-900' : 'text-slate-400'}`}>支出</Text></TouchableOpacity>
+                    <TouchableOpacity className={`flex-1 py-3 rounded-lg items-center ${type === 'income' ? 'bg-white border border-slate-200' : ''}`} onPress={() => setType('income')}><Text className={`font-bold ${type === 'income' ? 'text-slate-900' : 'text-slate-400'}`}>收入</Text></TouchableOpacity>
+                  </View>
+                  <Text className="text-sm font-semibold text-slate-500 mb-2">金額</Text>
+                  <View className="flex-row items-center border-b-2 border-indigo-100 pb-2 mb-6">
+                    <Text className="text-3xl font-bold text-slate-800 mr-2">RM</Text>
+                    <TextInput className="flex-1 text-4xl font-extrabold text-indigo-600" placeholder="0.00" placeholderTextColor="#cbd5e1" keyboardType="decimal-pad" value={amount} onChangeText={setAmount} autoFocus />
+                  </View>
+                  
+                  <Text className="text-sm font-semibold text-slate-500 mb-3">選擇類別</Text>
+                  <View className="flex-row flex-wrap gap-2 mb-6">
+                    {(categories || []).filter(c => c.type === type).map((cat) => (
+                      <TouchableOpacity key={cat.id} onPress={() => setSelectedCategoryId(cat.id.toString())} className={`px-4 py-2 rounded-full border ${selectedCategoryId === cat.id.toString() ? 'bg-indigo-50 border-indigo-600' : 'bg-white border-slate-200'}`}>
+                        <Text className={`font-medium ${selectedCategoryId === cat.id.toString() ? 'text-indigo-600' : 'text-slate-600'}`}>{cat.name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                    {/* 🌟 行內新增按鈕 */}
+                    <TouchableOpacity onPress={() => setIsInlineCategoryMode(true)} className="px-3 py-2 rounded-full border border-dashed border-slate-400 bg-slate-50 flex-row items-center active:bg-slate-200">
+                      <Plus size={16} color="#64748b" />
+                      <Text className="font-bold text-slate-500 ml-1">新增</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <Text className="text-sm font-semibold text-slate-500 mb-2">備註 (選填)</Text>
+                  <TextInput className="bg-slate-50 p-4 rounded-xl text-slate-800 mb-4" placeholder="例如：午餐..." placeholderTextColor="#94a3b8" value={note} onChangeText={setNote} />
+                  {type === 'income' && (
+                    <TouchableOpacity onPress={() => setIsSavings(!isSavings)} className={`flex-row items-center p-4 rounded-xl mb-4 border ${isSavings ? 'bg-emerald-50/60 border-emerald-500' : 'bg-slate-50 border-slate-200'}`}>
+                      <View className={`w-6 h-6 rounded-md items-center justify-center border-2 mr-3 ${isSavings ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300'}`}><Plus size={16} color="white" strokeWidth={4} /></View>
+                      <Text className={`font-bold text-base ${isSavings ? 'text-emerald-700' : 'text-slate-600'}`}>將此筆收入標記為「儲蓄項目」</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity className={`py-4 rounded-2xl items-center ${amount && selectedCategoryId ? 'bg-indigo-600' : 'bg-slate-300'}`} disabled={!amount || !selectedCategoryId} onPress={handleSaveTransaction}><Text className="text-white font-bold text-lg">儲存記錄</Text></TouchableOpacity>
+                </View>
               )}
-              <TouchableOpacity className={`py-4 rounded-2xl items-center ${amount && selectedCategoryId ? 'bg-indigo-600' : 'bg-slate-300'}`} disabled={!amount || !selectedCategoryId} onPress={handleSaveTransaction}><Text className="text-white font-bold text-lg">儲存記錄</Text></TouchableOpacity>
             </TouchableOpacity>
           </KeyboardAvoidingView>
         </TouchableOpacity>
       </Modal>
 
-      {/* ===== 🌟 個人帳號設定 Modal (智慧訪客雙態版) ===== */}
       <Modal visible={isProfileVisible} animationType="slide" transparent={true}>
         <View className="flex-1 bg-slate-50 mt-16 rounded-t-[32px] shadow-2xl p-6">
           <View className="flex-row justify-between items-center mb-8">
@@ -407,7 +457,6 @@ const Dashboard = () => {
         </View>
       </Modal>
 
-      {/* ===== 🌟 內嵌式：登入與帳號無縫升級註冊視窗 ===== */}
       <Modal visible={isAuthModalVisible} animationType="slide" transparent={true}>
         <TouchableOpacity className="flex-1 bg-black/40 justify-end" activeOpacity={1} onPress={() => setAuthModalVisible(false)}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -418,15 +467,15 @@ const Dashboard = () => {
               </View>
 
               <View className="bg-slate-100 rounded-xl p-1 mb-6 flex-row">
-                <TouchableOpacity className={`flex-1 py-2.5 rounded-lg items-center ${!isRegisterMode ? 'bg-white shadow-sm' : ''}`} onPress={() => setIsRegisterMode(false)}><Text className="font-bold text-slate-800">已有帳號登入</Text></TouchableOpacity>
-                <TouchableOpacity className={`flex-1 py-2.5 rounded-lg items-center ${isRegisterMode ? 'bg-white shadow-sm' : ''}`} onPress={() => setIsRegisterMode(true)}><Text className="font-bold text-slate-800">將訪客升級成新帳號</Text></TouchableOpacity>
+                <TouchableOpacity className={`flex-1 py-2.5 rounded-lg items-center ${!isRegisterMode ? 'bg-white border border-slate-200' : ''}`} onPress={() => setIsRegisterMode(false)}><Text className="font-bold text-slate-800">已有帳號登入</Text></TouchableOpacity>
+                <TouchableOpacity className={`flex-1 py-2.5 rounded-lg items-center ${isRegisterMode ? 'bg-white border border-slate-200' : ''}`} onPress={() => setIsRegisterMode(true)}><Text className="font-bold text-slate-800">將訪客升級成新帳號</Text></TouchableOpacity>
               </View>
 
               <Text className="text-sm font-semibold text-slate-500 mb-2">電子信箱</Text>
               <TextInput className="bg-slate-50 p-4 rounded-xl text-slate-800 mb-4 border border-slate-200" placeholder="example@mail.com" keyboardType="email-address" autoCapitalize="none" value={authEmail} onChangeText={setAuthEmail} />
 
               <Text className="text-sm font-semibold text-slate-500 mb-2">密碼</Text>
-              <TextInput className="bg-slate-50 p-4 rounded-xl text-slate-800 mb-6 border border-slate-200" placeholder="輸入密碼" secureTextEntry autoCapitalize="none" value={authPassword} onChangeText={setAuthPassword} />
+              <TextInput className="bg-slate-50 p-4 rounded-xl text-slate-800 mb-6 border border-slate-200" placeholder="輸入密碼 (至少 6 位)" secureTextEntry autoCapitalize="none" value={authPassword} onChangeText={setAuthPassword} />
 
               <TouchableOpacity className="bg-indigo-600 py-4 rounded-2xl items-center mb-4 active:opacity-90" onPress={handleAuthSubmit}>
                 <Text className="text-white font-bold text-lg">{isRegisterMode ? '確認綁定並升級' : '安全登入'}</Text>
