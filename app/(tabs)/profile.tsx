@@ -1,15 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import React, { useState } from 'react';
+import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AlertConfig, CustomAlert } from '../../components/ui/CustomAlert';
 import { CustomButton } from '../../components/ui/CustomButton';
-import { CustomInput } from '../../components/ui/CustomInput';
 import { useAuth } from '../../hooks/useAuth';
 import { useBudget } from '../../hooks/useBudget';
-import { CustomAlert, AlertConfig } from '../../components/ui/CustomAlert';
 
 export default function ProfileScreen() {
+  const { totalBudget } = useBudget();
   const { signOut, isLoading: isSignOutLoading } = useAuth();
-  const { budget, updateBudget } = useBudget();
   const [budgetInput, setBudgetInput] = useState('');
 
   // 彈跳視窗狀態
@@ -18,64 +17,24 @@ export default function ProfileScreen() {
   });
   const hideAlert = () => setAlertConfig(prev => ({ ...prev, visible: false }));
 
-  // 當雲端資料庫的預算加載完成時，自動填入輸入框
-  useEffect(() => {
-    if (budget) {
-      setBudgetInput(budget.toString());
-    }
-  }, [budget]);
-
-  // 儲存預算邏輯
-  const handleSaveBudget = async () => {
-    const amount = parseFloat(budgetInput);
-    if (isNaN(amount) || amount <= 0) {
-      setAlertConfig({ visible: true, title: '格式錯誤', message: '請輸入有效的預算金額喔！', type: 'warning' });
-      return;
-    }
-
-    try {
-      await updateBudget.mutateAsync(amount);
-      setAlertConfig({ visible: true, title: '設定成功', message: '您的每月目標預算已成功更新！', type: 'success' });
-    } catch (error) {
-      console.error(error);
-      setAlertConfig({ visible: true, title: '更新失敗', message: '雲端儲存失敗，請稍後再試。', type: 'error' });
-    }
-  };
-
   return (
     <SafeAreaView className="flex-1 bg-slate-50">
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1">
         <ScrollView showsVerticalScrollIndicator={false} className="flex-1 px-6 pt-4">
           <Text className="text-3xl font-extrabold text-slate-900 tracking-tight mb-8">個人設定</Text>
 
-          {/* 個人資訊卡片 */}
-          <View className="bg-white p-6 rounded-3xl items-center shadow-sm border border-slate-100 mb-6">
-            <View className="w-20 h-20 bg-indigo-100 rounded-full items-center justify-center mb-4">
-              <Text className="text-2xl font-bold text-indigo-600">T</Text>
-            </View>
-            <Text className="text-xl font-bold text-slate-900">Tan Jun Jie</Text>
-            <Text className="text-slate-400 text-sm mt-1">軟體開發實实习生</Text>
-          </View>
-
-          {/* 🌟 核心：預算設定區塊 */}
-          <View className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 mb-8">
-            <Text className="text-lg font-bold text-slate-800 mb-4">財務目標管理</Text>
-            
-            <CustomInput
-              label="每月目標預算 (RM)"
-              placeholder="例如：3500"
-              keyboardType="numeric"
-              value={budgetInput}
-              onChangeText={setBudgetInput}
-            />
-
-            <CustomButton
-              title="儲存預算設定"
-              onPress={handleSaveBudget}
-              isLoading={updateBudget.isPending}
-              className="mt-2"
-            />
-          </View>
+          {/* 🌟 替代原本的預算設定區：改為 Friendly 的唯讀資訊卡 */}
+      <View className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm mb-6">
+        <Text className="text-base font-bold text-slate-800 mb-2">每月預算配置</Text>
+        <Text className="text-sm text-slate-500 mb-4 leading-5">
+          目前的每月總預算已調整為「根據您在交易類別中所設定的個別支出限額自動加總」。若想調整總額，請至類別分頁修改。
+        </Text>
+        
+        <View className="bg-slate-50 p-4 rounded-2xl flex-row justify-between items-center">
+          <Text className="font-semibold text-slate-600">目前類別總預算</Text>
+          <Text className="font-black text-xl text-indigo-600">RM {totalBudget.toFixed(2)}</Text>
+        </View>
+      </View>
 
           {/* 系統操作 */}
           <CustomButton 
