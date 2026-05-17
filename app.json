@@ -53,6 +53,13 @@
       "eas": {
         "projectId": "0fb606b1-7c4c-4407-a733-c7ce54255d4b"
       }
-    }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/0fb606b1-7c4c-4407-a733-c7ce54255d4b"
+    },
+    "owner": "xiaojieapril"
   }
 }
