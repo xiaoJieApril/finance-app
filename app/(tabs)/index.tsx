@@ -5,7 +5,6 @@ import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, SafeAr
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AlertConfig, CustomAlert } from '../../components/ui/CustomAlert';
 import { CustomButton } from '../../components/ui/CustomButton';
-import { CustomInput } from '../../components/ui/CustomInput';
 import { useAuth } from '../../hooks/useAuth';
 import { useBudget } from '../../hooks/useBudget';
 import { useTransactions } from '../../hooks/useTransactions';
@@ -39,7 +38,7 @@ const Dashboard = () => {
   const { fetchTransactions, fetchCategories, addTransaction, deleteTransaction, updateTransaction, addCategory } = useTransactions();
   const { data: transactions, isLoading } = fetchTransactions;
   const { data: categories } = fetchCategories;
-  const { budget: TARGET_BUDGET, isLoading: isBudgetLoading, updateBudget } = useBudget();
+  const { totalBudget, totalSpending, remainingBudget } = useBudget();
   
   const [isModalVisible, setModalVisible] = useState(false);
   const [isProfileVisible, setProfileVisible] = useState(false);
@@ -83,10 +82,6 @@ const Dashboard = () => {
   }, [params.openModal]);
 
   useEffect(() => {
-    if (TARGET_BUDGET) setBudgetInput(TARGET_BUDGET.toString());
-  }, [TARGET_BUDGET]);
-
-  useEffect(() => {
     const checkUserStatus = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
@@ -114,8 +109,6 @@ const Dashboard = () => {
       return total;
     }, 0);
   }, [transactions]);
-
-  const progressPercentage = Math.min((currentMonthExpenses / TARGET_BUDGET) * 100, 100).toFixed(0);
 
   const formattedSectionTitle = useMemo(() => {
     if (selectedDateStr === todayStr) return '今日記錄';
@@ -156,19 +149,6 @@ const Dashboard = () => {
     setOptionsModalVisible(true);
   };
 
-  const handleSaveBudget = async () => {
-    const amt = parseFloat(budgetInput);
-    if (isNaN(amt) || amt <= 0) {
-      setAlertConfig({ visible: true, title: '格式錯誤', message: '請輸入有效的預算金額喔！', type: 'warning' });
-      return;
-    }
-    try {
-      await updateBudget.mutateAsync(amt); setProfileVisible(false);
-      setAlertConfig({ visible: true, title: '設定成功', message: '您的每月目標預算已成功更新！', type: 'success' });
-    } catch {
-      setAlertConfig({ visible: true, title: '更新失敗', message: '雲端儲存失敗。', type: 'error' });
-    }
-  };
 
   // 🌟 新增：行內保存類別的函數
   const handleSaveInlineCategory = async () => {
@@ -237,7 +217,7 @@ const Dashboard = () => {
     }
   };
 
-  if (isLoading || isBudgetLoading) {
+  if (isLoading) {
     return (
       <View className="flex-1 justify-center items-center bg-slate-50">
         <ActivityIndicator size="large" color="#4f46e5" />
@@ -256,18 +236,25 @@ const Dashboard = () => {
           <View className="w-11" />
         </View>
         
-        <View className="bg-indigo-600 p-6 rounded-3xl mb-6 shadow-xl shadow-indigo-100">
-          <View className="flex-row justify-between items-center mb-2">
-            <Text className="text-indigo-100 text-sm font-medium">本月總支出</Text>
-            <View className="bg-indigo-500/50 px-3 py-1 rounded-full">
-              <Text className="text-white text-xs font-bold">已使用 {progressPercentage}%</Text>
+        <View className="bg-indigo-600 p-6 rounded-3xl shadow-sm mb-6">
+          <Text className="text-indigo-100 font-semibold text-sm mb-1">本月動態總預算</Text>
+          {/* 如果各類別都沒設預算，會顯示 RM 0 */}
+          <Text className="text-white text-3xl font-black mb-4">
+            RM {totalBudget.toFixed(2)}
+          </Text>
+
+          <View className="flex-row justify-between border-t border-indigo-500/40 pt-4">
+            <View>
+              <Text className="text-indigo-200 text-xs mb-1">已支出</Text>
+              <Text className="text-white font-bold text-base">RM {totalSpending.toFixed(2)}</Text>
+            </View>
+            <View className="items-end">
+              <Text className="text-indigo-200 text-xs mb-1">剩餘預算</Text>
+              <Text className={`font-bold text-base ${remainingBudget < 0 ? 'text-rose-300' : 'text-emerald-300'}`}>
+                RM {remainingBudget.toFixed(2)}
+              </Text>
             </View>
           </View>
-          <Text className="text-white text-4xl font-extrabold mt-1 tracking-tight">RM {currentMonthExpenses.toFixed(2)}</Text>
-          <View className="mt-5 bg-indigo-300 h-3 rounded-full overflow-hidden">
-            <View className="bg-white h-full rounded-full" style={{ width: `${Number(progressPercentage)}%` }} />
-          </View>
-          <Text className="text-indigo-100 text-xs mt-3 font-normal">目標預算: RM {TARGET_BUDGET.toFixed(2)}</Text>
         </View>
 
         <View className="bg-white p-4 rounded-3xl mb-6 shadow-sm border border-slate-100">
@@ -442,12 +429,6 @@ const Dashboard = () => {
               <Text className="text-slate-400 text-xs font-medium mt-0.5">{userEmail}</Text>
             </View>
           )}
-
-          <View className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 mb-8">
-            <Text className="text-base font-bold text-slate-800 mb-4">財務總預算控管</Text>
-            <CustomInput label="每月目標總預算 (RM)" placeholder="例如：3500" keyboardType="numeric" value={budgetInput} onChangeText={setBudgetInput} />
-            <CustomButton title="儲存預算設定" onPress={handleSaveBudget} />
-          </View>
 
           {isAnonymous ? (
             <CustomButton title="登入 / 建立正式帳號" onPress={() => setAuthModalVisible(true)} />

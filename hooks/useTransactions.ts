@@ -44,6 +44,41 @@ export const useTransactions = () => {
     },
   });
 
+  // ==========================================
+  // 🌟 新增：修改類別 (updateCategory)
+  // ==========================================
+  const updateCategory = useMutation({
+    mutationFn: async (updatedCat: Partial<Category> & { id: number }) => {
+      const { id, ...fields } = updatedCat;
+      const { data, error } = await supabase
+        .from('categories')
+        .update(fields)
+        .eq('id', id);
+      
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
+      // 如果類別的名稱或圖示改了，交易列表的 UI 也應該要刷新
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    },
+  });
+
+  // ==========================================
+  // 🌟 新增：刪除類別 (deleteCategory)
+  // ==========================================
+  const deleteCategory = useMutation({
+    mutationFn: async (id: number) => {
+      const { error } = await supabase.from('categories').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    },
+  });
+
   // 3. 新增交易
   const addTransaction = useMutation({
     mutationFn: async (newTx: Partial<Transaction>) => {
@@ -91,5 +126,12 @@ export const useTransactions = () => {
     },
   });
 
-  return { fetchTransactions, fetchCategories, addCategory, addTransaction, deleteTransaction, updateTransaction };
+  return { fetchTransactions, 
+            fetchCategories, 
+            addCategory, 
+            addTransaction, 
+            deleteTransaction, 
+            updateTransaction,
+            updateCategory,
+            deleteCategory };
 };
