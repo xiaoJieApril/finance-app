@@ -2,9 +2,10 @@ import '../global.css'; // <--- 救回所有 UI 的關鍵！
 
 import { Session } from '@supabase/supabase-js';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import * as Notifications from 'expo-notifications';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { LogBox } from 'react-native';
+import { LogBox, Platform } from 'react-native';
 import { supabase } from '../services/supabase';
 
 // 隱藏不必要的樣式警告
@@ -14,11 +15,41 @@ LogBox.ignoreLogs([
 
 const queryClient = new QueryClient();
 
+// 🌟 告訴系統當 App 在前景運作時，收到通知該怎麼處理
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
+
 export default function RootLayout() {
   const [session, setSession] = useState<Session | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const router = useRouter();
   const segments = useSegments(); // 用來獲取當前的路由層級
+
+  // 🌟 請求用戶的通知權限
+  useEffect(() => {
+    async function requestPermissions() {
+      if (Platform.OS !== 'web') {
+        const { status: existingStatus } = await Notifications.getPermissionsAsync();
+        let finalStatus = existingStatus;
+        
+        if (existingStatus !== 'granted') {
+          const { status } = await Notifications.requestPermissionsAsync();
+          finalStatus = status;
+        }
+        
+        if (finalStatus !== 'granted') {
+          console.log('未取得推播通知權限');
+          return;
+        }
+      }
+    }
+    requestPermissions();
+  }, []);
 
   // 1. 初始化與監聽登入狀態
   useEffect(() => {

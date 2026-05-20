@@ -1,3 +1,4 @@
+import * as Notifications from 'expo-notifications';
 import { useLocalSearchParams } from 'expo-router';
 import { BookOpen, Car, ChevronLeft, ChevronRight, Coffee, Edit3, Gamepad2, Heart, LayoutGrid, MessageSquareText, Monitor, Plane, Plus, ShoppingBag, Trash2, User, Utensils, Wallet, X } from 'lucide-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -182,16 +183,61 @@ const Dashboard = () => {
       return;
     }
     try {
+      const parsedAmount = parseFloat(amount);
+      
       if (editingTransaction) {
-        await updateTransaction.mutateAsync({ id: editingTransaction.id, amount: parseFloat(amount), note: note, category_id: parseInt(selectedCategoryId) });
+        await updateTransaction.mutateAsync({ id: editingTransaction.id, amount: parsedAmount, note: note, category_id: parseInt(selectedCategoryId) });
         setAlertConfig({ visible: true, title: '修改成功', message: '交易紀錄已更新。', type: 'success' });
       } else {
-        await addTransaction.mutateAsync({ amount: parseFloat(amount), note: note, category_id: parseInt(selectedCategoryId), date: new Date(selectedDateStr + 'T12:00:00').toISOString(), is_savings: type === 'income' ? isSavings : false });
+        // 1. 先執行儲存到資料庫的動作
+        await addTransaction.mutateAsync({ 
+          amount: parsedAmount, 
+          note: note, 
+          category_id: parseInt(selectedCategoryId), 
+          date: new Date(selectedDateStr + 'T12:00:00').toISOString(), 
+          is_savings: type === 'income' ? isSavings : false 
+        });
+        
+        // 2. 🚨 預警邏輯 (加入獨立的 try-catch 保護)
+        if (type === 'expense' && totalBudget > 0) {
+          const updatedTotalExpenses = totalSpending + parsedAmount;
+          const warningThreshold = totalBudget * 0.9;
+
+          try {
+            if (updatedTotalExpenses > totalBudget) {
+              await Notifications.scheduleNotificationAsync({
+                content: {
+                  title: "🚨 預算超支警告！",
+                  body: `您本月的總支出已達 RM ${updatedTotalExpenses.toFixed(2)}，超過了設定的總預算！請注意財務狀況。`,
+                  sound: true,
+                },
+                trigger: null,
+              });
+            } else if (updatedTotalExpenses >= warningThreshold) {
+              await Notifications.scheduleNotificationAsync({
+                content: {
+                  title: "⚠️ 預算即將見底",
+                  body: `您本月支出已達預算的 90%，剩下的額度不多囉！`,
+                },
+                trigger: null,
+              });
+            }
+          } catch (notificationError) {
+            // 攔截 Expo Go 的報錯，讓程式能繼續往下走
+            console.log("Expo Go 環境不支援推播，已略過彈出通知，但資料已成功儲存。");
+          }
+        }
+
         setAlertConfig({ visible: true, title: '新增成功', message: '交易紀錄已儲存！', type: 'success' });
       }
+      
+      // 3. 正常清空表單並關閉 Modal
       setAmount(''); setNote(''); setSelectedCategoryId(null); setIsSavings(false); setEditingTransaction(null); setModalVisible(false);
-    } catch {
-      setAlertConfig({ visible: true, title: '發生錯誤', message: '儲存失敗。', type: 'error' });
+      
+    } catch (error) {
+      // 這裡攔截的是真正的資料庫儲存錯誤
+      console.error("Supabase 儲存失敗:", error);
+      setAlertConfig({ visible: true, title: '發生錯誤', message: '儲存失敗，請檢查網路。', type: 'error' });
     }
   };
 
