@@ -1,10 +1,10 @@
+import { BookOpen, Car, Coffee, Gamepad2, Heart, LayoutGrid, MessageSquareText, Monitor, Plane, ShoppingBag, Trash2, Utensils, Wallet } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
-import { View, Text, ActivityIndicator, SectionList, TouchableOpacity, Modal } from 'react-native';
+import { ActivityIndicator, Modal, SectionList, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AlertConfig, CustomAlert } from '../../components/ui/CustomAlert';
 import { useTransactions } from '../../hooks/useTransactions';
-import { LayoutGrid, Utensils, Heart, BookOpen, Car, Wallet, Gamepad2, ShoppingBag, Coffee, Plane, Monitor, MessageSquareText, Trash2 } from 'lucide-react-native';
 import { Transaction } from '../../type';
-import { CustomAlert, AlertConfig } from '../../components/ui/CustomAlert';
 
 const renderCategoryIcon = (iconId: string, size = 20, color = '#64748b') => {
   switch (iconId) {

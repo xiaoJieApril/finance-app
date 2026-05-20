@@ -1,7 +1,6 @@
-import React from 'react';
 import { Tabs } from 'expo-router';
-import { Home, History, Plus, LayoutGrid, BarChart3 } from 'lucide-react-native';
-import { View, Platform } from 'react-native';
+import { BarChart3, History, Home, LayoutGrid, Plus } from 'lucide-react-native';
+import { Platform, View } from 'react-native';
 
 export default function TabLayout() {
   return (
