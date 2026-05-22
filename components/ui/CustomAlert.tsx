@@ -22,7 +22,7 @@ interface CustomAlertProps {
 }
 
 export const CustomAlert = ({ config, hideAlert }: CustomAlertProps) => {
-  if (!config.visible) return null;
+  if (!config || !config.visible) return null;
 
   // 根據不同類型顯示對應的顏色與圖示
   const getIcon = () => {

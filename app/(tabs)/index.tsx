@@ -233,7 +233,7 @@ export default function Dashboard() {
 
       {/* 精美自訂彈窗元件 */}
       <CustomAlert
-        visible={alertConfig.visible}
+        visible={alertConfig?.visible || false}
         title={alertConfig.title}
         message={alertConfig.message}
         type={alertConfig.type}

@@ -53,18 +53,25 @@ export default function RootLayout() {
 
   // 1. 初始化與監聽登入狀態
   useEffect(() => {
-    // 初次載入時抓取 Session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setIsInitialized(true);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      
+      // 1. 如果用戶是「主動登出」，將他導向登入頁，且 絕對不要 幫他匿名登入
+      if (event === 'SIGNED_OUT') {
+        console.log('用戶已登出，跳轉至登入頁');
+        router.replace('/login');
+        return; 
+      }
+
+      // 2. 只有在「App 初次啟動 (INITIAL_SESSION)」且真的沒有登入紀錄時，才發放匿名通行證
+      if (event === 'INITIAL_SESSION' && !session) {
+        console.log('初次使用，建立匿名訪客');
+        await supabase.auth.signInAnonymously();
+      }
     });
 
-    // 監聽後續的登入/登出動作
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
