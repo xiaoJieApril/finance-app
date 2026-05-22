@@ -51,20 +51,40 @@ export default function RootLayout() {
     requestPermissions();
   }, []);
 
-  // 1. 初始化與監聽登入狀態
+  // 🌟 核心整合：統一管理所有的 Auth 狀態變化與路由跳轉
   useEffect(() => {
+    // 1. 初次載入時抓取一次當前 Session 狀態
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setIsInitialized(true);
+    });
+
+    // 2. 監聽後續所有的登入/登出/狀態改變動作
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      setSession(session);
       
-      // 1. 如果用戶是「主動登出」，將他導向登入頁，且 絕對不要 幫他匿名登入
+      console.log(`🔔 Auth 事件觸發: ${event}, 是否有 Session: ${!!session}`);
+
+      // 情境 A：用戶主動點擊「登出」
       if (event === 'SIGNED_OUT') {
-        console.log('用戶已登出，跳轉至登入頁');
+        console.log('➡️ 偵測到登出，將用戶送往登入頁');
         router.replace('/login');
-        return; 
+        return;
       }
 
-      // 2. 只有在「App 初次啟動 (INITIAL_SESSION)」且真的沒有登入紀錄時，才發放匿名通行證
+      // 情境 B：用戶在登入頁「成功登入」帳號 (修正無法登入的關鍵 ✨)
+      if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
+        // 只有在當前確實處於登入頁面時，才主動跳轉回主頁
+        if (segments.includes('login')) {
+          console.log('➡️ 登入成功，自動跳轉進主頁 (tabs)');
+          router.replace('/(tabs)');
+        }
+        return;
+      }
+
+      // 情境 C：App 首次冷啟動，且後台完全沒有任何登入紀錄
       if (event === 'INITIAL_SESSION' && !session) {
-        console.log('初次使用，建立匿名訪客');
+        console.log('➡️ 初次開啟且無紀錄，在背景發放匿名訪客通行證');
         await supabase.auth.signInAnonymously();
       }
     });
@@ -72,22 +92,7 @@ export default function RootLayout() {
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
-
-  useEffect(() => {
-    // 監聽登入狀態
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      // 🌟 核心修改：當發現用戶完全沒登入時，默默在背景幫他建立一個「匿名訪客通行證」
-      // 這樣他一打開 App 就會直接看到主頁，而且背後已經有了一個 UUID 可以直接記帳！
-      if (!session) {
-        await supabase.auth.signInAnonymously();
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
+  }, [segments]); // 監聽 segments，確保能隨時抓到最新所在的頁面路徑
 
   return (
     <QueryClientProvider client={queryClient}>
