@@ -13,6 +13,7 @@ export interface AlertConfig {
   confirmText?: string;
   cancelText?: string;
   onConfirm?: () => void;
+  onCancel?: () => void;
 }
 
 interface CustomAlertProps {
