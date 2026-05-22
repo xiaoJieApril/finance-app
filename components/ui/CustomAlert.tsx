@@ -1,6 +1,6 @@
+import { AlertCircle, AlertTriangle, CheckCircle2, Info } from 'lucide-react-native';
 import React from 'react';
-import { Modal, View, Text, TouchableOpacity } from 'react-native';
-import { CheckCircle2, AlertTriangle, Info, AlertCircle } from 'lucide-react-native';
+import { Modal, Text, TouchableOpacity, View } from 'react-native';
 
 export type AlertType = 'success' | 'error' | 'warning' | 'info';
 
@@ -13,7 +13,6 @@ export interface AlertConfig {
   confirmText?: string;
   cancelText?: string;
   onConfirm?: () => void;
-  onCancel?: () => void;
 }
 
 interface CustomAlertProps {
