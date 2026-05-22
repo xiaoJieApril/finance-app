@@ -1,18 +1,22 @@
+import DateTimePicker from '@react-native-community/datetimepicker'; // 🌟 引入原生日期選擇器
 import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import {
+  Calendar as CalendarIcon // 引入日曆圖標
+  ,
   CheckCircle,
   ChevronLeft,
   ChevronRight,
-  CircleDollarSign // 預設的類別圖標
-  ,
-
+  CircleDollarSign,
   MessageSquareText,
+  Plus,
   User,
   X
 } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
 import {
+  Alert // 🌟 引入原生 Alert 用於刪除確認
+  ,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -47,16 +51,17 @@ export default function Dashboard() {
   const [note, setNote] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [isSavings, setIsSavings] = useState(false);
+  
+  // 🌟 新增：表單內目前選中的 Date 物件，以及控制 Android 日期視窗是否顯示的狀態
+  const [formDate, setFormDate] = useState(new Date());
+  const [showAndroidDatePicker, setShowAndroidDatePicker] = useState(false);
 
   const [alertConfig, setAlertConfig] = useState({ visible: false, title: '', message: '', type: 'success' as 'success' | 'error' | 'warning' });
 
   // --- 📅 月曆與數據邏輯 ---
-
-  // 1. 切換月份
   const handlePrevMonth = () => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1));
   const handleNextMonth = () => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1));
 
-  // 2. 計算月曆網格 (產生二維陣列，代表每週的日期，空白填 null)
   const calendarWeeks = useMemo(() => {
     const year = calendarDate.getFullYear();
     const month = calendarDate.getMonth();
@@ -80,7 +85,6 @@ export default function Dashboard() {
     return weeks;
   }, [calendarDate]);
 
-  // 3. 計算每一天的總收入與總支出 (給月曆格子顯示用)
   const dailyAggregates = useMemo(() => {
     const aggregates: Record<string, { income: number; expense: number }> = {};
     transactions.forEach((t: any) => {
@@ -94,33 +98,33 @@ export default function Dashboard() {
     return aggregates;
   }, [transactions]);
 
-  // 4. 篩選當前選中日期的交易紀錄
   const filteredTransactions = useMemo(() => {
     return transactions.filter((t: any) => new Date(t.date).toLocaleDateString('en-CA') === selectedDateStr);
   }, [transactions, selectedDateStr]);
 
-  // 5. 格式化選中的日期標題 (例如：10 月 25 日)
   const formattedSectionTitle = useMemo(() => {
     const [y, m, d] = selectedDateStr.split('-');
     return `${parseInt(m)} 月 ${parseInt(d)} 日 明細`;
   }, [selectedDateStr]);
 
-  // 6. 點擊清單項目進行編輯
+  // 7. 點擊清單項目進行編輯
   const handleTransactionPress = (item: any) => {
     setEditingTransaction(item);
     setAmount(item.amount.toString());
     setNote(item.note || '');
     setSelectedCategoryId(item.category_id?.toString());
     setType(item.category?.type || 'expense');
+    
+    // 🌟 編輯時，把這筆交易原本的日期帶入表單日期 state 中
+    setFormDate(item.date ? new Date(item.date) : new Date());
     setModalVisible(true);
   };
 
-  // 7. 簡單的圖標輔助函式
   const getCategoryIcon = (name: string) => {
     return <CircleDollarSign size={20} color="#64748b" />;
   };
 
-  // --- 預算與進度計算 ---
+  // --- 💰 數據計算邏輯 ---
   const totalSpending = useMemo(() => {
     const currentMonth = new Date().getMonth();
     const currentYear = new Date().getFullYear();
@@ -131,6 +135,16 @@ export default function Dashboard() {
 
   const progressPercentage = totalBudget > 0 ? Math.min((totalSpending / totalBudget) * 100, 100) : 0;
 
+  // 🌟 新增：日期變更事件處理
+  const onDateChange = (event: any, selectedDate?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowAndroidDatePicker(false); // 安裝 Android 選完後關閉
+    }
+    if (selectedDate) {
+      setFormDate(selectedDate);
+    }
+  };
+
   // --- 儲存交易邏輯 ---
   const handleSaveTransaction = async () => {
     if (!amount || !selectedCategoryId) {
@@ -138,13 +152,25 @@ export default function Dashboard() {
     }
     try {
       const parsedAmount = parseFloat(amount);
+      
+      // 🌟 使用目前表單選中的 formDate 來儲存，而不是寫死 selectedDateStr
+      const saveDateISO = formDate.toISOString();
+
       if (editingTransaction) {
-        await updateTransaction.mutateAsync({ id: editingTransaction.id, amount: parsedAmount, note, category_id: parseInt(selectedCategoryId) });
+        await updateTransaction.mutateAsync({ 
+          id: editingTransaction.id, 
+          amount: parsedAmount, 
+          note, 
+          category_id: parseInt(selectedCategoryId),
+          date: saveDateISO // 🌟 更新時也支援更改日期
+        });
         setAlertConfig({ visible: true, title: '成功', message: '交易已更新。', type: 'success' });
       } else {
         await addTransaction.mutateAsync({ 
-          amount: parsedAmount, note, category_id: parseInt(selectedCategoryId), 
-          date: new Date(selectedDateStr + 'T12:00:00').toISOString(), 
+          amount: parsedAmount, 
+          note, 
+          category_id: parseInt(selectedCategoryId), 
+          date: saveDateISO, // 🌟 儲存自訂選擇的日期
           is_savings: type === 'income' ? isSavings : false 
         });
         
@@ -160,10 +186,40 @@ export default function Dashboard() {
         }
         setAlertConfig({ visible: true, title: '成功', message: '交易已儲存！', type: 'success' });
       }
+      
+      // 成功後將日曆網格切換到剛剛記帳的那一天，方便立刻看到結果
+      setSelectedDateStr(formDate.toLocaleDateString('en-CA'));
       setAmount(''); setNote(''); setSelectedCategoryId(null); setIsSavings(false); setEditingTransaction(null); setModalVisible(false);
     } catch (error) {
       setAlertConfig({ visible: true, title: '錯誤', message: '儲存失敗。', type: 'error' });
     }
+  };
+
+  // 🌟 刪除交易邏輯
+  const handleDeleteTransaction = () => {
+    if (!editingTransaction) return;
+
+    Alert.alert(
+      '刪除確認',
+      '確定要刪除這筆交易紀錄嗎？',
+      [
+        { text: '取消', style: 'cancel' },
+        { 
+          text: '刪除', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteTransaction.mutateAsync(editingTransaction.id);
+              setModalVisible(false);
+              setEditingTransaction(null);
+              setAlertConfig({ visible: true, title: '已刪除', message: '交易紀錄已成功刪除。', type: 'success' });
+            } catch (error) {
+              setAlertConfig({ visible: true, title: '錯誤', message: '刪除失敗，請稍後再試。', type: 'error' });
+            }
+          } 
+        }
+      ]
+    );
   };
 
   return (
@@ -261,7 +317,21 @@ export default function Dashboard() {
         )}
       </ScrollView>
 
-      {/* 記帳 Modal 彈窗 (維持原樣) */}
+      {/* 新增記帳浮動按鈕 */}
+      <TouchableOpacity 
+        onPress={() => { 
+          setEditingTransaction(null); 
+          // 🌟 新增時，預設日期直接設定為畫面上使用者目前選中的日期格
+          const [y, m, d] = selectedDateStr.split('-');
+          setFormDate(new Date(parseInt(y), parseInt(m) - 1, parseInt(d)));
+          setModalVisible(true); 
+        }}
+        className="absolute bottom-6 self-center w-14 h-14 bg-indigo-600 rounded-full items-center justify-center shadow-lg"
+      >
+        <Plus color="white" size={28} />
+      </TouchableOpacity>
+
+      {/* 記帳 Modal 彈窗 */}
       <Modal visible={modalVisible} animationType="slide" transparent={true}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} className="flex-1 justify-end bg-black/50">
           <View className="bg-white rounded-t-3xl p-6 h-5/6">
@@ -278,6 +348,42 @@ export default function Dashboard() {
                 <TouchableOpacity onPress={() => setType('income')} className={`flex-1 py-2 rounded-lg items-center ${type === 'income' ? 'bg-white shadow-sm' : ''}`}>
                   <Text className={`font-bold ${type === 'income' ? 'text-emerald-500' : 'text-slate-500'}`}>收入</Text>
                 </TouchableOpacity>
+              </View>
+
+              {/* 🌟 全新日期選擇區塊 🌟 */}
+              <Text className="text-slate-500 mb-2 font-medium">選擇日期</Text>
+              <View className="mb-6 flex-row items-center">
+                {Platform.OS === 'ios' ? (
+                  // iOS 官方標準最美外觀：直接內嵌緊湊型小按鈕滾輪
+                  <DateTimePicker
+                    value={formDate}
+                    mode="date"
+                    display="default"
+                    onChange={onDateChange}
+                    locale="zh-Hant"
+                  />
+                ) : (
+                  // Android 官方規範：點擊按鈕彈出全螢幕日曆對話框
+                  <>
+                    <TouchableOpacity 
+                      onPress={() => setShowAndroidDatePicker(true)}
+                      className="flex-row items-center bg-slate-50 border border-slate-200 rounded-xl p-4 flex-1 shadow-sm active:bg-slate-100"
+                    >
+                      <CalendarIcon size={18} color="#4F46E5" />
+                      <Text className="ml-3 font-bold text-slate-700 text-base">
+                        {formDate.toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric' })}
+                      </Text>
+                    </TouchableOpacity>
+                    {showAndroidDatePicker && (
+                      <DateTimePicker
+                        value={formDate}
+                        mode="date"
+                        display="default"
+                        onChange={onDateChange}
+                      />
+                    )}
+                  </>
+                )}
               </View>
 
               <Text className="text-slate-500 mb-2 font-medium">金額 (RM)</Text>
@@ -315,9 +421,24 @@ export default function Dashboard() {
                 placeholder="寫點什麼備註吧..."
               />
 
-              <TouchableOpacity onPress={handleSaveTransaction} className="bg-indigo-600 rounded-xl p-4 items-center">
-                <Text className="text-white font-bold text-lg">儲存記錄</Text>
-              </TouchableOpacity>
+              {/* 🌟 底部並排按鈕：支援編輯模式下的「刪除」功能 */}
+              <View className="flex-row mt-2 mb-8 gap-3">
+                {editingTransaction && (
+                  <TouchableOpacity 
+                    onPress={handleDeleteTransaction} 
+                    className="flex-1 bg-rose-50 border border-rose-200 rounded-xl p-4 items-center active:bg-rose-100"
+                  >
+                    <Text className="text-rose-600 font-bold text-lg">刪除</Text>
+                  </TouchableOpacity>
+                )}
+                
+                <TouchableOpacity 
+                  onPress={handleSaveTransaction} 
+                  className={`bg-indigo-600 rounded-xl p-4 items-center ${editingTransaction ? 'flex-1' : 'w-full'} active:bg-indigo-700`}
+                >
+                  <Text className="text-white font-bold text-lg">儲存記錄</Text>
+                </TouchableOpacity>
+              </View>
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
