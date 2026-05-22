@@ -53,12 +53,7 @@ export default function TabLayout() {
             </View>
           ),
         }}
-        listeners={({ navigation }) => ({
-          tabPress: (e) => {
-            e.preventDefault(); 
-            navigation.navigate('index', { openModal: Date.now().toString() }); 
-          },
-        })}
+        // 🌟 這裡原本的 listeners 區塊已經被我們徹底刪除了！
       />
 
       {/* 4. 右二：交易類別控管 */}
