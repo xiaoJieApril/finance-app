@@ -1,5 +1,4 @@
 import DateTimePicker from '@react-native-community/datetimepicker'; // 🌟 引入原生日期選擇器
-import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import {
   Calendar as CalendarIcon // 引入日曆圖標
@@ -28,12 +27,15 @@ import {
 } from 'react-native';
 import { CustomAlert } from '../../components/ui/CustomAlert';
 import { useBudget } from '../../hooks/useBudget';
+import { useNotificationSettings } from '../../hooks/useNotificationSettings';
 import { useTransactions } from '../../hooks/useTransactions';
+import { checkBudgetAlerts } from '../../services/notifications';
 
 export default function Dashboard() {
   const router = useRouter();
   const { fetchTransactions, fetchCategories, addTransaction, updateTransaction, deleteTransaction } = useTransactions();
   const { totalBudget } = useBudget();
+  const { settings: notifSettings } = useNotificationSettings();
   const { data: transactions = [] } = fetchTransactions;
   const { data: categories = [] } = fetchCategories;
 
@@ -174,15 +176,18 @@ export default function Dashboard() {
           is_savings: type === 'income' ? isSavings : false 
         });
         
-        if (type === 'expense' && totalBudget > 0) {
-          const updatedTotalExpenses = totalSpending + parsedAmount;
+        if (type === 'expense' && notifSettings.budgetAlertEnabled) {
           try {
-            if (updatedTotalExpenses > totalBudget) {
-              await Notifications.scheduleNotificationAsync({ content: { title: "🚨 預算超支！", body: `本月支出已超過預算！`, sound: true }, trigger: null });
-            } else if (updatedTotalExpenses >= totalBudget * 0.9) {
-              await Notifications.scheduleNotificationAsync({ content: { title: "⚠️ 預算警告", body: `本月支出已達預算 90%！` }, trigger: null });
-            }
-          } catch (e) { console.log("略過推播"); }
+            await checkBudgetAlerts({
+              transactions,
+              categories,
+              categoryId: parseInt(selectedCategoryId),
+              addedAmount: parsedAmount,
+              totalBudget,
+            });
+          } catch {
+            // 權限未開啟時略過
+          }
         }
         setAlertConfig({ visible: true, title: '成功', message: '交易已儲存！', type: 'success' });
       }

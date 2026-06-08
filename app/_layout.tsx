@@ -19,6 +19,8 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
   }),
 });
 
@@ -66,18 +68,20 @@ export default function RootLayout() {
   useEffect(() => {
     if (!isInitialized) return; // 如果還沒確認好 Session，先不要動作
 
-    // 判斷目前用戶是不是正在需要登入的主頁區塊內
-    const inAuthGroup = segments[0] === '(tabs)';
+    // 修改這裡：我們改為判斷用戶是不是在「登入頁」
+    const inLoginScreen = segments[0] === 'login';
 
-    if (!session && inAuthGroup) {
-      // 情境 A：【沒有登入】卻在【主頁】 -> 把他踢回登入頁
+    if (!session && !inLoginScreen) {
+      // 情境 A：【沒有登入】卻在【非登入頁 (包含 tabs, analytics 等)】 -> 把他踢回登入頁
       console.log('➡️ 無 Session，踢回登入頁');
       router.replace('/login');
-    } else if (session && !inAuthGroup) {
+    } else if (session && inLoginScreen) {
       // 情境 B：【已經登入】卻在【登入頁】 -> 把他送進主頁
       console.log('➡️ 有 Session，送進主頁');
       router.replace('/(tabs)');
     }
+    // 其他情境 (有登入，且在 tabs 或 analytics)，什麼都不做，直接放行！
+    
   }, [session, isInitialized, segments]); // 只要這三個變數有任何改變，就會自動執行判斷
 
   return (
@@ -85,6 +89,8 @@ export default function RootLayout() {
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
+        <Stack.Screen name="analytics" options={{ headerShown: false }} />
+        <Stack.Screen name="ai-agent" options={{ headerShown: false }} />
       </Stack>
     </QueryClientProvider>
   );
