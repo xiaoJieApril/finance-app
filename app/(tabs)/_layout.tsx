@@ -1,7 +1,6 @@
-import React from 'react';
 import { Tabs } from 'expo-router';
-import { Home, History, Plus, LayoutGrid, BarChart3 } from 'lucide-react-native';
-import { View, Platform } from 'react-native';
+import { BarChart3, History, Home, LayoutGrid } from 'lucide-react-native';
+import { Platform } from 'react-native';
 
 export default function TabLayout() {
   return (
@@ -41,25 +40,6 @@ export default function TabLayout() {
           title: '歷史記錄',
           tabBarIcon: ({ color }) => <History size={22} color={color} />,
         }}
-      />
-
-      {/* 3. 🌟 正中間：凸起立體加號按鈕 */}
-      <Tabs.Screen
-        name="add_transaction"
-        options={{
-          title: '', 
-          tabBarIcon: () => (
-            <View className="bg-indigo-600 w-14 h-14 rounded-full justify-center items-center -mt-8 shadow-xl shadow-indigo-300 border-4 border-white">
-              <Plus size={28} color="white" strokeWidth={3} />
-            </View>
-          ),
-        }}
-        listeners={({ navigation }) => ({
-          tabPress: (e) => {
-            e.preventDefault(); 
-            navigation.navigate('index', { openModal: Date.now().toString() }); 
-          },
-        })}
       />
 
       {/* 4. 右二：交易類別控管 */}

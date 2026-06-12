@@ -1,6 +1,6 @@
+import { AlertCircle, AlertTriangle, CheckCircle2, Info } from 'lucide-react-native';
 import React from 'react';
-import { Modal, View, Text, TouchableOpacity } from 'react-native';
-import { CheckCircle2, AlertTriangle, Info, AlertCircle } from 'lucide-react-native';
+import { Modal, Text, TouchableOpacity, View } from 'react-native';
 
 export type AlertType = 'success' | 'error' | 'warning' | 'info';
 
@@ -22,7 +22,7 @@ interface CustomAlertProps {
 }
 
 export const CustomAlert = ({ config, hideAlert }: CustomAlertProps) => {
-  if (!config.visible) return null;
+  if (!config || !config.visible) return null;
 
   // 根據不同類型顯示對應的顏色與圖示
   const getIcon = () => {
