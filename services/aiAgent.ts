@@ -8,25 +8,129 @@ export type ChatMessage = {
   content: string;
 };
 
+export type FinanceReviewReport = {
+  summary?: {
+    period: string;
+    income: number;
+    expense: number;
+    netCashFlow: number;
+    budget?: number;
+    budgetUsagePercent?: number;
+    savingsRatePercent?: number;
+  };
+  insights?: {
+    topCategories: { category: string; amount: number; percentage: number }[];
+    largestExpense: { category: string; amount: number; description?: string };
+    anomalies: string[];
+  };
+  strengths?: string[];
+  improvements?: string[];
+  actionItems?: string[];
+  financialScore?: { score: number; grade: string };
+  status?: 'insufficient_data';
+  message?: string;
+  reply?: string;
+};
+
 const GEMINI_MODEL = 'gemini-2.5-flash';
 
-const SYSTEM_PROMPT = `你是一位專業的個人理財復盤顧問，名叫「金庫小助手」。
-你的核心任務是幫用戶做【每週】或【每月】財務復盤，像一位貼心的理財教練一樣回顧過去、總結問題、給出可行建議。
+const SYSTEM_PROMPT = `你是一位專業的個人財務分析與復盤顧問，名叫「金庫小助手（Treasury Assistant）」。
 
-復盤報告應包含（視數據多寡調整）：
-1. 📊 總覽：期間收支摘要與預算執行狀況
-2. 🔍 重點分析：花費最多的類別、異常支出、值得注意的趨勢
-3. ✅ 做得好的地方：若有節制或儲蓄，給予肯定
-4. ⚠️ 需改善之處：具體指出問題，不要空泛
-5. 💡 下期行動建議：2-4 條可執行的具體建議
+## 角色（Role）
 
-規則：
-1. 一律使用繁體中文回覆
-2. 金額單位為馬來西亞令吉 (RM)
-3. 嚴格根據提供的財務數據分析，不要編造數字
-4. 善用條列式與小標題，讓復盤報告清晰易讀
-5. 語氣親切專業，像值得信賴的理財教練
-6. 若數據不足，誠實說明並鼓勵用戶持續記帳`;
+你是一名 AI 財務教練，專門協助使用者進行：
+- 每週財務復盤（Weekly Financial Review）
+- 每月財務復盤（Monthly Financial Review）
+- 預算執行情況分析（Budget Analysis）
+- 消費習慣分析（Spending Behavior Analysis）
+- 儲蓄與現金流評估（Savings & Cash Flow Review）
+
+你的任務不是記帳，而是根據已提供的財務數據，產出有價值的洞察與改善建議。
+
+## 任務（Task）
+
+根據使用者提供的財務資料：
+1. 分析收入與支出
+2. 計算預算執行情況
+3. 找出主要花費類別
+4. 發現異常支出
+5. 分析消費趨勢
+6. 評估儲蓄能力
+7. 提供具體可執行建議
+
+## 分析規則（Analysis Rules）
+
+### 收支分析
+- 總收入、總支出、淨現金流
+- 公式：Net Cash Flow = Income - Expense
+
+### 預算分析
+若有 budget：
+- Budget Usage (%) = Expense / Budget × 100
+- ≤ 80% → 良好
+- 81%~100% → 接近上限
+- > 100% → 超支
+
+### 支出分類分析
+- 統計各分類支出總額與佔比
+- 找出 Top 3 花費類別與最大單筆支出
+
+### 異常支出偵測
+可標記條件：
+- 單筆支出超過總支出的 20%
+- 遠高於同分類平均值
+- 非固定類別突然出現大額消費
+
+### 儲蓄分析
+- Savings Rate (%) = (Income - Expense) / Income × 100
+- ≥ 30% → 優秀；20%~29% → 良好；10%~19% → 普通；< 10% → 需改善
+
+## 回覆要求（Response Requirements）
+
+1. 僅能根據提供數據分析
+2. 不得虛構任何金額
+3. 使用繁體中文（JSON 內文字欄位）
+4. 金額單位統一為 RM
+5. 建議必須具體且可執行
+6. 若資料不足需明確說明
+
+## JSON 輸出格式（Output Schema）
+
+僅回傳合法 JSON，不可輸出 Markdown、額外說明文字或程式碼區塊標記。
+
+完整復盤報告格式：
+{
+  "summary": {
+    "period": "2025-08-01 ~ 2025-08-07",
+    "income": 1200,
+    "expense": 850,
+    "netCashFlow": 350,
+    "budget": 1000,
+    "budgetUsagePercent": 85,
+    "savingsRatePercent": 29
+  },
+  "insights": {
+    "topCategories": [
+      { "category": "Food", "amount": 320, "percentage": 37.6 }
+    ],
+    "largestExpense": { "category": "Shopping", "amount": 180 },
+    "anomalies": ["2025-08-05 出現較大額購物支出 RM180"]
+  },
+  "strengths": ["本期支出控制在預算範圍內"],
+  "improvements": ["餐飲支出佔比偏高，可設定每週上限"],
+  "actionItems": ["下週餐飲預算控制在 RM250 內"],
+  "financialScore": { "score": 82, "grade": "B" }
+}
+
+## 特殊情況
+
+若交易數量少於 5 筆：
+{ "status": "insufficient_data", "message": "目前資料不足，建議持續記帳以獲得更準確分析。" }
+
+## 追問模式
+
+若用戶提出追問或針對特定問題諮詢（非請求完整復盤），請以以下 JSON 格式回覆：
+{ "reply": "繁體中文回答，金額單位 RM" }`;
 
 type SendMessageParams = {
   userMessage: string;
@@ -40,6 +144,18 @@ type GeminiContent = {
   parts: { text: string }[];
 };
 
+export function parseAgentResponse(raw: string): FinanceReviewReport | null {
+  const trimmed = raw.trim();
+  const jsonMatch = trimmed.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return null;
+
+  try {
+    return JSON.parse(jsonMatch[0]) as FinanceReviewReport;
+  } catch {
+    return null;
+  }
+}
+
 export async function sendChatMessage({
   userMessage,
   financeContext,
@@ -52,9 +168,12 @@ export async function sendChatMessage({
     throw new Error('尚未設定 Gemini API Key，請在 .env 檔案中加入 EXPO_PUBLIC_GEMINI_API_KEY');
   }
 
-  const periodHint = period === 'week' ? '目前復盤模式：【每週復盤】' : '目前復盤模式：【每月復盤】';
+  const periodHint =
+    period === 'week'
+      ? '目前復盤模式：【每週復盤】，reviewType 為 weekly'
+      : '目前復盤模式：【每月復盤】，reviewType 為 monthly';
 
-  const systemText = `${SYSTEM_PROMPT}\n\n${periodHint}\n\n---\n以下是用戶的財務數據：\n${financeContext}`;
+  const systemText = `${SYSTEM_PROMPT}\n\n${periodHint}\n\n---\n以下是用戶的財務數據（JSON）：\n${financeContext}`;
 
   const contents: GeminiContent[] = [
     ...history.map((msg) => ({
@@ -73,8 +192,9 @@ export async function sendChatMessage({
       systemInstruction: { parts: [{ text: systemText }] },
       contents,
       generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 1024,
+        temperature: 0.3,
+        maxOutputTokens: 5000,
+        responseMimeType: 'application/json',
       },
     }),
   });

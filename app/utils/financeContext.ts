@@ -2,6 +2,21 @@ import { Category, Transaction } from '../../type';
 
 export type ReviewPeriod = 'week' | 'month';
 
+export type FinanceInput = {
+  reviewType: 'weekly' | 'monthly';
+  period: { startDate: string; endDate: string };
+  income: number;
+  expense: number;
+  budget: number;
+  transactions: {
+    date: string;
+    category: string;
+    amount: number;
+    description: string;
+    type: 'income' | 'expense';
+  }[];
+};
+
 type FinanceSummary = {
   totalBudget: number;
   totalSpending: number;
@@ -9,9 +24,15 @@ type FinanceSummary = {
   totalIncome: number;
   savingsTotal: number;
   categoryBreakdown: { name: string; amount: number; limit?: number }[];
-  periodTransactions: { date: string; category: string; amount: number; note: string; type: string }[];
+  periodTransactions: FinanceInput['transactions'];
   periodLabel: string;
+  startDate: string;
+  endDate: string;
 };
+
+function toISODate(date: Date): string {
+  return date.toISOString().split('T')[0];
+}
 
 function filterByPeriod(transactions: Transaction[], period: ReviewPeriod): Transaction[] {
   const now = new Date();
@@ -35,6 +56,21 @@ function filterByPeriod(transactions: Transaction[], period: ReviewPeriod): Tran
   });
 }
 
+function getPeriodDates(period: ReviewPeriod): { startDate: string; endDate: string } {
+  const now = new Date();
+  now.setHours(23, 59, 59, 999);
+
+  if (period === 'week') {
+    const weekAgo = new Date(now);
+    weekAgo.setDate(weekAgo.getDate() - 6);
+    weekAgo.setHours(0, 0, 0, 0);
+    return { startDate: toISODate(weekAgo), endDate: toISODate(now) };
+  }
+
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  return { startDate: toISODate(start), endDate: toISODate(now) };
+}
+
 function buildSummary(
   transactions: Transaction[],
   categories: Category[],
@@ -43,6 +79,7 @@ function buildSummary(
 ): FinanceSummary {
   const now = new Date();
   const periodTxs = filterByPeriod(transactions, period);
+  const { startDate, endDate } = getPeriodDates(period);
 
   const periodLabel =
     period === 'week'
@@ -76,12 +113,12 @@ function buildSummary(
     })
     .sort((a, b) => b.amount - a.amount);
 
-  const periodTransactions = periodTxs.map((tx) => ({
-    date: new Date(tx.date).toLocaleDateString('zh-TW'),
+  const periodTransactions: FinanceInput['transactions'] = periodTxs.map((tx) => ({
+    date: toISODate(new Date(tx.date)),
     category: tx.category?.name ?? '未分類',
     amount: tx.amount,
-    note: tx.note || '（無備註）',
-    type: tx.category?.type ?? 'unknown',
+    description: tx.note || '（無備註）',
+    type: (tx.category?.type === 'income' ? 'income' : 'expense') as 'income' | 'expense',
   }));
 
   const remainingBudget = period === 'month' ? totalBudget - totalSpending : totalBudget;
@@ -95,6 +132,26 @@ function buildSummary(
     categoryBreakdown,
     periodTransactions,
     periodLabel,
+    startDate,
+    endDate,
+  };
+}
+
+export function buildFinanceInput(
+  transactions: Transaction[],
+  categories: Category[],
+  totalBudget: number,
+  period: ReviewPeriod = 'month',
+): FinanceInput {
+  const s = buildSummary(transactions, categories, totalBudget, period);
+
+  return {
+    reviewType: period === 'week' ? 'weekly' : 'monthly',
+    period: { startDate: s.startDate, endDate: s.endDate },
+    income: s.totalIncome,
+    expense: s.totalSpending,
+    budget: s.totalBudget,
+    transactions: s.periodTransactions,
   };
 }
 
@@ -104,50 +161,7 @@ export function buildFinanceContext(
   totalBudget: number,
   period: ReviewPeriod = 'month',
 ): string {
-  const s = buildSummary(transactions, categories, totalBudget, period);
-
-  const categoryLines = s.categoryBreakdown.length
-    ? s.categoryBreakdown
-        .map((c) => {
-          const limitStr = c.limit ? ` / 月預算 RM ${c.limit.toFixed(2)}` : '';
-          const usageStr =
-            c.limit && c.limit > 0
-              ? `（${((c.amount / c.limit) * 100).toFixed(0)}%）`
-              : '';
-          return `  - ${c.name}: RM ${c.amount.toFixed(2)}${limitStr}${usageStr}`;
-        })
-        .join('\n')
-    : '  （此期間尚無支出紀錄）';
-
-  const txLines = s.periodTransactions.length
-    ? s.periodTransactions
-        .map(
-          (tx) =>
-            `  - ${tx.date} | ${tx.type === 'income' ? '收入' : '支出'} | ${tx.category} | RM ${tx.amount.toFixed(2)} | ${tx.note}`,
-        )
-        .join('\n')
-    : '  （此期間尚無交易紀錄）';
-
-  const budgetSection =
-    period === 'month' && s.totalBudget > 0
-      ? `- 月預算: RM ${s.totalBudget.toFixed(2)}
-- 剩餘預算: RM ${s.remainingBudget.toFixed(2)}
-- 預算使用率: ${((s.totalSpending / s.totalBudget) * 100).toFixed(1)}%`
-      : '- 月預算參考: 請以本月預算為基準評估本週花費節奏';
-
-  return `
-【復盤期間 — ${s.periodLabel}】
-- 期間總支出: RM ${s.totalSpending.toFixed(2)}
-- 期間總收入: RM ${s.totalIncome.toFixed(2)}
-- 期間儲蓄: RM ${s.savingsTotal.toFixed(2)}
-${budgetSection}
-
-【各類別支出明細】
-${categoryLines}
-
-【期間內所有交易（共 ${s.periodTransactions.length} 筆）】
-${txLines}
-`.trim();
+  return JSON.stringify(buildFinanceInput(transactions, categories, totalBudget, period), null, 2);
 }
 
 export const RECAP_PROMPTS: Record<ReviewPeriod, string[]> = {
@@ -166,5 +180,7 @@ export const RECAP_PROMPTS: Record<ReviewPeriod, string[]> = {
 };
 
 export function getRecapPrompt(period: ReviewPeriod): string {
-  return period === 'week' ? '請根據以上數據，幫我做一份完整的本週財務復盤報告。' : '請根據以上數據，幫我做一份完整的本月財務復盤報告。';
+  return period === 'week'
+    ? '請根據以上 JSON 數據，產出完整的本週財務復盤報告。'
+    : '請根據以上 JSON 數據，產出完整的本月財務復盤報告。';
 }

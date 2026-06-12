@@ -14,7 +14,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBudget } from '../hooks/useBudget';
 import { useTransactions } from '../hooks/useTransactions';
-import { ChatMessage, sendChatMessage } from '../services/aiAgent';
+import { ReviewReportView } from '../components/ReviewReportView';
+import { ChatMessage, parseAgentResponse, sendChatMessage } from '../services/aiAgent';
 import {
   buildFinanceContext,
   getRecapPrompt,
@@ -85,6 +86,8 @@ export default function AIAgentScreen() {
 
   const renderMessage = ({ item }: { item: ChatMessage }) => {
     const isUser = item.role === 'user';
+    const report = !isUser ? parseAgentResponse(item.content) : null;
+
     return (
       <View className={`mb-4 ${isUser ? 'items-end' : 'items-start'}`}>
         <View className="flex-row items-end gap-2 max-w-[85%]">
@@ -100,9 +103,13 @@ export default function AIAgentScreen() {
                 : 'bg-white border border-slate-100 rounded-bl-sm shadow-sm'
             }`}
           >
-            <Text className={`text-[15px] leading-6 ${isUser ? 'text-white' : 'text-slate-700'}`}>
-              {item.content}
-            </Text>
+            {isUser ? (
+              <Text className="text-[15px] leading-6 text-white">{item.content}</Text>
+            ) : report ? (
+              <ReviewReportView report={report} />
+            ) : (
+              <Text className="text-[15px] leading-6 text-slate-700">{item.content}</Text>
+            )}
           </View>
         </View>
       </View>
