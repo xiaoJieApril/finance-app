@@ -1,21 +1,10 @@
-import DateTimePicker from '@react-native-community/datetimepicker'; // 🌟 引入原生日期選擇器
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
-import {
-  Calendar as CalendarIcon // 引入日曆圖標
-  ,
-  CheckCircle,
-  ChevronLeft,
-  ChevronRight,
-  CircleDollarSign,
-  MessageSquareText,
-  Plus,
-  User,
-  X
-} from 'lucide-react-native';
+import { Bell, Plus, User, X } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
 import {
-  Alert // 🌟 引入原生 Alert 用於刪除確認
-  ,
+  ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -23,433 +12,363 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
-import { CustomAlert } from '../../components/ui/CustomAlert';
-import { useBudget } from '../../hooks/useBudget';
-import { useNotificationSettings } from '../../hooks/useNotificationSettings';
-import { useTransactions } from '../../hooks/useTransactions';
-import { checkBudgetAlerts } from '../../services/notifications';
+import { AccountBalanceCard } from '@/components/finance/AccountBalanceCard';
+import { BudgetProgressRow } from '@/components/finance/BudgetProgressRow';
+import { EmptyState } from '@/components/finance/EmptyState';
+import { FilterBar } from '@/components/finance/FilterBar';
+import { SectionHeader } from '@/components/finance/SectionHeader';
+import { SummaryMetric } from '@/components/finance/SummaryMetric';
+import { TransactionRow } from '@/components/finance/TransactionRow';
+import { CustomAlert, AlertConfig } from '@/components/ui/CustomAlert';
+import { useFinanceOverview } from '@/hooks/useFinanceOverview';
+import { CurrencyCode, TransactionType } from '@/type';
+import { formatMoney } from '@/utils/finance';
 
-export default function Dashboard() {
+const TYPE_OPTIONS = [
+  { label: '支出', value: 'expense' },
+  { label: '收入', value: 'income' },
+  { label: '轉帳', value: 'transfer' },
+] as const;
+
+const CURRENCY_OPTIONS = [
+  { label: 'MYR', value: 'MYR' },
+  { label: 'SGD', value: 'SGD' },
+  { label: 'USD', value: 'USD' },
+  { label: 'EUR', value: 'EUR' },
+] as const;
+
+export default function OverviewScreen() {
   const router = useRouter();
-  const { fetchTransactions, fetchCategories, addTransaction, updateTransaction, deleteTransaction } = useTransactions();
-  const { totalBudget } = useBudget();
-  const { settings: notifSettings } = useNotificationSettings();
-  const { data: transactions = [] } = fetchTransactions;
-  const { data: categories = [] } = fetchCategories;
-
-  // --- 狀態管理 ---
-  const todayStr = useMemo(() => new Date().toLocaleDateString('en-CA'), []);
-  const [selectedDateStr, setSelectedDateStr] = useState(todayStr);
-  
-  // 📅 月曆的當前顯示月份
-  const [calendarDate, setCalendarDate] = useState(new Date());
+  const { overview, financeData, saveEntry, isLoading } = useFinanceOverview();
+  const data = financeData.data;
 
   const [modalVisible, setModalVisible] = useState(false);
-  const [editingTransaction, setEditingTransaction] = useState<any>(null);
-  const [type, setType] = useState<'expense' | 'income'>('expense');
+  const [type, setType] = useState<TransactionType>('expense');
+  const [accountId, setAccountId] = useState<string | null>(null);
+  const [toAccountId, setToAccountId] = useState<string | null>(null);
+  const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [currency, setCurrency] = useState<CurrencyCode>('MYR');
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [date, setDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [isSavings, setIsSavings] = useState(false);
-  
-  // 🌟 新增：表單內目前選中的 Date 物件，以及控制 Android 日期視窗是否顯示的狀態
-  const [formDate, setFormDate] = useState(new Date());
-  const [showAndroidDatePicker, setShowAndroidDatePicker] = useState(false);
+  const [alertConfig, setAlertConfig] = useState<AlertConfig>({
+    visible: false,
+    title: '',
+    message: '',
+    type: 'info',
+  });
 
-  const [alertConfig, setAlertConfig] = useState({ visible: false, title: '', message: '', type: 'success' as 'success' | 'error' | 'warning' });
+  const categories = useMemo(
+    () => data?.categories.filter((category) => category.type === type) ?? [],
+    [data?.categories, type],
+  );
 
-  // --- 📅 月曆與數據邏輯 ---
-  const handlePrevMonth = () => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1));
-  const handleNextMonth = () => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1));
+  const latestEntries = useMemo(() => data?.entries.slice(0, 4) ?? [], [data?.entries]);
 
-  const calendarWeeks = useMemo(() => {
-    const year = calendarDate.getFullYear();
-    const month = calendarDate.getMonth();
-    const firstDayOfMonth = new Date(year, month, 1).getDay();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-    const weeks = [];
-    let currentWeek: (number | null)[] = Array(firstDayOfMonth).fill(null);
-
-    for (let day = 1; day <= daysInMonth; day++) {
-      currentWeek.push(day);
-      if (currentWeek.length === 7) {
-        weeks.push(currentWeek);
-        currentWeek = [];
-      }
-    }
-    if (currentWeek.length > 0) {
-      while (currentWeek.length < 7) currentWeek.push(null);
-      weeks.push(currentWeek);
-    }
-    return weeks;
-  }, [calendarDate]);
-
-  const dailyAggregates = useMemo(() => {
-    const aggregates: Record<string, { income: number; expense: number }> = {};
-    transactions.forEach((t: any) => {
-      if (!t.date) return;
-      const dateKey = new Date(t.date).toLocaleDateString('en-CA');
-      if (!aggregates[dateKey]) aggregates[dateKey] = { income: 0, expense: 0 };
-      
-      if (t.category?.type === 'expense') aggregates[dateKey].expense += t.amount;
-      else if (t.category?.type === 'income') aggregates[dateKey].income += t.amount;
-    });
-    return aggregates;
-  }, [transactions]);
-
-  const filteredTransactions = useMemo(() => {
-    return transactions.filter((t: any) => new Date(t.date).toLocaleDateString('en-CA') === selectedDateStr);
-  }, [transactions, selectedDateStr]);
-
-  const formattedSectionTitle = useMemo(() => {
-    const [y, m, d] = selectedDateStr.split('-');
-    return `${parseInt(m)} 月 ${parseInt(d)} 日 明細`;
-  }, [selectedDateStr]);
-
-  // 7. 點擊清單項目進行編輯
-  const handleTransactionPress = (item: any) => {
-    setEditingTransaction(item);
-    setAmount(item.amount.toString());
-    setNote(item.note || '');
-    setSelectedCategoryId(item.category_id?.toString());
-    setType(item.category?.type || 'expense');
-    
-    // 🌟 編輯時，把這筆交易原本的日期帶入表單日期 state 中
-    setFormDate(item.date ? new Date(item.date) : new Date());
+  const openNewEntry = () => {
+    const firstAccount = data?.accounts[0]?.id ?? null;
+    setType('expense');
+    setAccountId(firstAccount);
+    setToAccountId(data?.accounts[1]?.id ?? firstAccount);
+    setCategoryId(null);
+    setCurrency('MYR');
+    setAmount('');
+    setNote('');
+    setDate(new Date());
+    setIsSavings(false);
     setModalVisible(true);
   };
 
-  const getCategoryIcon = (name: string) => {
-    return <CircleDollarSign size={20} color="#64748b" />;
-  };
-
-  // --- 💰 數據計算邏輯 ---
-  const totalSpending = useMemo(() => {
-    const currentMonth = new Date().getMonth();
-    const currentYear = new Date().getFullYear();
-    return transactions
-      .filter((t: any) => new Date(t.date).getMonth() === currentMonth && new Date(t.date).getFullYear() === currentYear && t.category?.type === 'expense')
-      .reduce((sum: number, t: any) => sum + t.amount, 0);
-  }, [transactions]);
-
-  const progressPercentage = totalBudget > 0 ? Math.min((totalSpending / totalBudget) * 100, 100) : 0;
-
-  // 🌟 新增：日期變更事件處理
-  const onDateChange = (event: any, selectedDate?: Date) => {
-    if (Platform.OS === 'android') {
-      setShowAndroidDatePicker(false); // 安裝 Android 選完後關閉
+  const handleSave = async () => {
+    const parsedAmount = Number(amount);
+    if (!parsedAmount || parsedAmount <= 0) {
+      setAlertConfig({ visible: true, title: '金額錯誤', message: '請輸入有效金額。', type: 'warning' });
+      return;
     }
-    if (selectedDate) {
-      setFormDate(selectedDate);
+    if (!accountId) {
+      setAlertConfig({ visible: true, title: '缺少帳戶', message: '請先選擇帳戶。', type: 'warning' });
+      return;
     }
-  };
+    if (type !== 'transfer' && !categoryId) {
+      setAlertConfig({ visible: true, title: '缺少類別', message: '請選擇交易類別。', type: 'warning' });
+      return;
+    }
+    if (type === 'transfer' && (!toAccountId || toAccountId === accountId)) {
+      setAlertConfig({ visible: true, title: '轉帳帳戶錯誤', message: '請選擇不同的轉入帳戶。', type: 'warning' });
+      return;
+    }
 
-  // --- 儲存交易邏輯 ---
-  const handleSaveTransaction = async () => {
-    if (!amount || !selectedCategoryId) {
-      setAlertConfig({ visible: true, title: '提示', message: '請填寫金額並選擇類別。', type: 'warning' }); return;
-    }
     try {
-      const parsedAmount = parseFloat(amount);
-      
-      // 🌟 使用目前表單選中的 formDate 來儲存，而不是寫死 selectedDateStr
-      const saveDateISO = formDate.toISOString();
-
-      if (editingTransaction) {
-        await updateTransaction.mutateAsync({ 
-          id: editingTransaction.id, 
-          amount: parsedAmount, 
-          note, 
-          category_id: parseInt(selectedCategoryId),
-          date: saveDateISO // 🌟 更新時也支援更改日期
-        });
-        setAlertConfig({ visible: true, title: '成功', message: '交易已更新。', type: 'success' });
-      } else {
-        await addTransaction.mutateAsync({ 
-          amount: parsedAmount, 
-          note, 
-          category_id: parseInt(selectedCategoryId), 
-          date: saveDateISO, // 🌟 儲存自訂選擇的日期
-          is_savings: type === 'income' ? isSavings : false 
-        });
-        
-        if (type === 'expense' && notifSettings.budgetAlertEnabled) {
-          try {
-            await checkBudgetAlerts({
-              transactions,
-              categories,
-              categoryId: parseInt(selectedCategoryId),
-              addedAmount: parsedAmount,
-              totalBudget,
-            });
-          } catch {
-            // 權限未開啟時略過
-          }
-        }
-        setAlertConfig({ visible: true, title: '成功', message: '交易已儲存！', type: 'success' });
-      }
-      
-      // 成功後將日曆網格切換到剛剛記帳的那一天，方便立刻看到結果
-      setSelectedDateStr(formDate.toLocaleDateString('en-CA'));
-      setAmount(''); setNote(''); setSelectedCategoryId(null); setIsSavings(false); setEditingTransaction(null); setModalVisible(false);
+      await saveEntry.mutateAsync({
+        type,
+        account_id: accountId,
+        to_account_id: type === 'transfer' ? toAccountId : null,
+        category_id: type === 'transfer' ? null : categoryId,
+        currency,
+        amount: parsedAmount,
+        note,
+        date: date.toISOString(),
+        is_savings: type === 'income' ? isSavings : false,
+      });
+      setModalVisible(false);
+      setAlertConfig({ visible: true, title: '已儲存', message: '交易已加入流水。', type: 'success' });
     } catch (error) {
-      setAlertConfig({ visible: true, title: '錯誤', message: '儲存失敗。', type: 'error' });
+      setAlertConfig({
+        visible: true,
+        title: '儲存失敗',
+        message: error instanceof Error ? error.message : '請稍後再試。',
+        type: 'error',
+      });
     }
   };
 
-  // 🌟 刪除交易邏輯
-  const handleDeleteTransaction = () => {
-    if (!editingTransaction) return;
-
-    Alert.alert(
-      '刪除確認',
-      '確定要刪除這筆交易紀錄嗎？',
-      [
-        { text: '取消', style: 'cancel' },
-        { 
-          text: '刪除', 
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteTransaction.mutateAsync(editingTransaction.id);
-              setModalVisible(false);
-              setEditingTransaction(null);
-              setAlertConfig({ visible: true, title: '已刪除', message: '交易紀錄已成功刪除。', type: 'success' });
-            } catch (error) {
-              setAlertConfig({ visible: true, title: '錯誤', message: '刪除失敗，請稍後再試。', type: 'error' });
-            }
-          } 
-        }
-      ]
+  if (isLoading || !overview || !data) {
+    return (
+      <View className="flex-1 justify-center items-center bg-slate-50">
+        <ActivityIndicator size="large" color="#4f46e5" />
+      </View>
     );
-  };
+  }
 
   return (
     <View className="flex-1 bg-slate-50">
-      <ScrollView className="flex-1 px-6 pt-12 pb-24" showsVerticalScrollIndicator={false}>
-        
-        {/* 頂部導航列 */}
-        <View className="flex-row justify-between items-center mb-6">
-          <TouchableOpacity onPress={() => router.push('/profile')} className="w-10 h-10 bg-indigo-100 rounded-full items-center justify-center border border-indigo-200">
-            <User color="#4F46E5" size={20} />
+      <ScrollView className="flex-1 px-5 pt-12" contentContainerStyle={{ paddingBottom: 110 }}>
+        <View className="flex-row items-center justify-between mb-5">
+          <View>
+            <Text className="text-sm font-semibold text-slate-400">本月財務總覽</Text>
+            <Text className="text-3xl font-black text-slate-900 mt-1">一眼掌握現金流</Text>
+          </View>
+          <TouchableOpacity
+            onPress={() => router.push('/profile')}
+            className="w-11 h-11 rounded-2xl bg-white border border-slate-100 items-center justify-center"
+          >
+            <User size={20} color="#475569" />
           </TouchableOpacity>
-          <Text className="text-xl font-black text-slate-800">我的金庫</Text>
-          <View className="w-10 h-10" />
         </View>
 
-        {/* 預算卡片 */}
-        <View className="bg-indigo-600 rounded-3xl p-6 mb-8 shadow-sm">
-          <Text className="text-indigo-100 text-sm mb-1">本月總支出</Text>
-          <Text className="text-white text-4xl font-bold mb-6">RM {totalSpending.toFixed(2)}</Text>
-          <View className="h-2 bg-indigo-900/50 rounded-full mb-2 overflow-hidden">
-            <View className="h-full bg-white rounded-full" style={{ width: `${progressPercentage}%` }} />
+        {data.source === 'legacy' && (
+          <View className="bg-amber-50 border border-amber-100 rounded-2xl p-4 mb-4">
+            <Text className="text-amber-700 font-bold">目前使用 legacy 相容模式</Text>
+            <Text className="text-amber-600 text-xs mt-1">
+              套用 v2 Supabase migration 後即可啟用帳戶、轉帳、多幣快取與固定帳單。
+            </Text>
           </View>
-          <View className="flex-row justify-between">
-            <Text className="text-indigo-200 text-xs">已使用 {progressPercentage.toFixed(0)}%</Text>
-            <Text className="text-indigo-200 text-xs">動態預算 RM {totalBudget.toFixed(2)}</Text>
-          </View>
+        )}
+
+        <View className="flex-row gap-3 mb-3">
+          <SummaryMetric label="收入" value={formatMoney(overview.cashFlow.income)} tone="income" />
+          <SummaryMetric label="支出" value={formatMoney(overview.cashFlow.expense)} tone="expense" />
+        </View>
+        <View className="flex-row gap-3 mb-5">
+          <SummaryMetric label="結餘" value={formatMoney(overview.cashFlow.balance)} />
+          <SummaryMetric label="淨資產" value={formatMoney(overview.totalNetWorth)} />
         </View>
 
-        {/* 📅 月曆模組 */}
-        <View className="bg-white p-4 rounded-3xl mb-6 shadow-sm border border-slate-100">
-          <View className="flex-row justify-between items-center mb-4 px-2">
-            <Text className="text-lg font-bold text-slate-800">{calendarDate.getFullYear()} 年 {calendarDate.getMonth() + 1} 月</Text>
-            <View className="flex-row gap-2">
-              <TouchableOpacity onPress={handlePrevMonth} className="bg-slate-50 p-2 rounded-full border border-slate-100 active:bg-slate-100"><ChevronLeft size={18} color="#475569" /></TouchableOpacity>
-              <TouchableOpacity onPress={handleNextMonth} className="bg-slate-50 p-2 rounded-full border border-slate-100 active:bg-slate-100"><ChevronRight size={18} color="#475569" /></TouchableOpacity>
-            </View>
+        <View className="bg-white border border-slate-100 rounded-2xl p-4 mb-6">
+          <View className="flex-row justify-between mb-2">
+            <Text className="font-bold text-slate-800">預算使用率</Text>
+            <Text className="font-black text-indigo-600">{Math.round(overview.budgetUsage * 100)}%</Text>
           </View>
-          <View className="flex-row mb-2">
-            {['日', '一', '二', '三', '四', '五', '六'].map((day, idx) => (
-              <Text key={idx} className={`flex-1 text-center text-xs font-bold ${idx === 0 || idx === 6 ? 'text-slate-400' : 'text-slate-500'}`}>{day}</Text>
-            ))}
+          <View className="h-2.5 bg-slate-100 rounded-full overflow-hidden mb-2">
+            <View
+              className={`h-full rounded-full ${overview.budgetUsage > 1 ? 'bg-rose-500' : 'bg-indigo-600'}`}
+              style={{ width: `${Math.min(overview.budgetUsage * 100, 100)}%` }}
+            />
           </View>
-          {calendarWeeks.map((week, weekIdx) => (
-            <View key={weekIdx} className="flex-row border-t border-slate-50 py-1.5 min-h-[48px]">
-              {week.map((day, dayIdx) => {
-                if (day === null) return <View key={dayIdx} className="flex-1" />;
-                const currentGridDate = new Date(calendarDate.getFullYear(), calendarDate.getMonth(), day);
-                const dateKey = currentGridDate.toLocaleDateString('en-CA');
-                const hasData = dailyAggregates[dateKey];
-                const isSelected = dateKey === selectedDateStr;
-                const isToday = dateKey === todayStr;
+          <Text className="text-xs text-slate-400">
+            {formatMoney(overview.totalBudgetSpent)} / {formatMoney(overview.totalBudget)}
+          </Text>
+        </View>
 
-                return (
-                  <TouchableOpacity key={dayIdx} onPress={() => setSelectedDateStr(dateKey)} className={`flex-1 items-center justify-between rounded-xl py-0.5 border ${isSelected ? 'bg-indigo-600 border-indigo-600' : isToday ? 'bg-indigo-50 border-indigo-200' : 'border-transparent'}`}>
-                    <Text className={`text-xs font-bold ${isSelected ? 'text-white' : isToday ? 'text-indigo-600' : 'text-slate-700'}`}>{day}</Text>
-                    <View className="w-full px-0.5 items-center mt-0.5">
-                      {hasData?.income > 0 && <Text className={`text-[9px] font-bold text-center scale-90 ${isSelected ? 'text-indigo-100' : 'text-emerald-500'}`} numberOfLines={1}>+{hasData.income.toFixed(0)}</Text>}
-                      {hasData?.expense > 0 && <Text className={`text-[9px] font-bold text-center scale-90 ${isSelected ? 'text-indigo-200' : 'text-rose-400'}`} numberOfLines={1}>-{hasData.expense.toFixed(0)}</Text>}
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+        <SectionHeader title="帳戶餘額" />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-6">
+          {overview.accounts.map((account) => (
+            <AccountBalanceCard key={account.id} account={account} />
           ))}
-        </View>
+        </ScrollView>
 
-        {/* --- 交易記錄列表 --- */}
-        <View className="flex-row justify-between items-center mb-4 px-1">
-          <Text className="text-xl font-bold text-slate-900">{formattedSectionTitle}</Text>
-          <Text className="text-xs text-slate-400 font-medium">共 {filteredTransactions.length} 筆</Text>
-        </View>
-        
-        {filteredTransactions.length === 0 ? (
-          <View className="bg-white rounded-2xl p-8 items-center border border-dashed border-slate-200 mb-10">
-            <Text className="text-slate-400 text-sm">此日期沒有任何記帳資料喔！</Text>
-          </View>
+        <SectionHeader title="即將到期" />
+        {overview.upcomingRecurringItems.length === 0 ? (
+          <EmptyState title="暫無即將到期項目" message="新增固定帳單後，這裡會顯示未來 14 天待辦。" />
         ) : (
-          <View className="mb-10">
-            {filteredTransactions.map((item: any) => (
-              <TouchableOpacity key={item.id} onPress={() => handleTransactionPress(item)} className="flex-row items-center bg-white p-4 rounded-2xl mb-3 shadow-sm border border-slate-100 active:bg-slate-50">
-                <View className="bg-slate-100 p-3.5 rounded-full mr-4">{getCategoryIcon(item.category?.name || '')}</View>
-                <View className="flex-1">
-                  <Text className="text-base font-semibold text-slate-800">{item.category?.name}</Text>
-                  <View className="flex-row items-center mt-1">
-                    <MessageSquareText size={12} color="#94a3b8" />
-                    <Text className="text-xs text-slate-400 ml-1.5" numberOfLines={1}>{item.note || '無備註'}</Text>
-                  </View>
+          <View className="mb-5">
+            {overview.upcomingRecurringItems.slice(0, 3).map((item) => (
+              <View key={item.id} className="bg-white border border-slate-100 rounded-2xl p-4 mb-3 flex-row items-center">
+                <View className="w-10 h-10 rounded-xl bg-amber-50 items-center justify-center mr-3">
+                  <Bell size={18} color="#d97706" />
                 </View>
-                <Text className={`text-lg font-bold ${item.category?.type === 'income' ? 'text-emerald-500' : 'text-rose-500'}`}>
-                  {item.category?.type === 'income' ? '+' : '-'}RM {item.amount.toFixed(2)}
+                <View className="flex-1">
+                  <Text className="font-bold text-slate-800">{item.name}</Text>
+                  <Text className="text-xs text-slate-400">{new Date(item.next_due_date).toLocaleDateString()}</Text>
+                </View>
+                <Text className={item.type === 'income' ? 'text-emerald-600 font-black' : 'text-rose-600 font-black'}>
+                  {formatMoney(item.amount)}
                 </Text>
-              </TouchableOpacity>
+              </View>
             ))}
           </View>
         )}
+
+        <SectionHeader title="預算風險" actionLabel="查看全部" onAction={() => router.push('/budget')} />
+        {overview.budgets.length === 0 ? (
+          <EmptyState title="尚未設定預算" message="到預算頁為主要支出類別設定月限額。" />
+        ) : (
+          overview.budgets
+            .slice()
+            .sort((a, b) => b.usage - a.usage)
+            .slice(0, 3)
+            .map((budget) => (
+              <BudgetProgressRow
+                key={budget.id}
+                category={budget.category}
+                spent={budget.spent}
+                limit={budget.monthly_limit}
+              />
+            ))
+        )}
+
+        <SectionHeader title="最近流水" actionLabel="全部流水" onAction={() => router.push('/history')} />
+        {latestEntries.length === 0 ? (
+          <EmptyState title="還沒有交易紀錄" message="點擊右下角 + 開始記第一筆。" />
+        ) : (
+          latestEntries.map((entry) => <TransactionRow key={entry.id} entry={entry} />)
+        )}
       </ScrollView>
 
-      {/* 新增記帳浮動按鈕 */}
-      <TouchableOpacity 
-        onPress={() => { 
-          setEditingTransaction(null); 
-          // 🌟 新增時，預設日期直接設定為畫面上使用者目前選中的日期格
-          const [y, m, d] = selectedDateStr.split('-');
-          setFormDate(new Date(parseInt(y), parseInt(m) - 1, parseInt(d)));
-          setModalVisible(true); 
-        }}
-        className="absolute bottom-6 self-center w-14 h-14 bg-indigo-600 rounded-full items-center justify-center shadow-lg"
+      <TouchableOpacity
+        onPress={openNewEntry}
+        className="absolute bottom-6 right-5 w-14 h-14 rounded-2xl bg-indigo-600 items-center justify-center shadow-lg"
       >
-        <Plus color="white" size={28} />
+        <Plus size={28} color="white" />
       </TouchableOpacity>
 
-      {/* 記帳 Modal 彈窗 */}
-      <Modal visible={modalVisible} animationType="slide" transparent={true}>
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} className="flex-1 justify-end bg-black/50">
-          <View className="bg-white rounded-t-3xl p-6 h-5/6">
-            <View className="flex-row justify-between items-center mb-6">
-              <Text className="text-xl font-bold">{editingTransaction ? '修改紀錄' : '新增交易'}</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}><X color="#64748b" size={24} /></TouchableOpacity>
+      <Modal visible={modalVisible} animationType="slide" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1 justify-end bg-black/40">
+          <View className="bg-white rounded-t-3xl p-5 max-h-[88%]">
+            <View className="flex-row items-center justify-between mb-4">
+              <Text className="text-xl font-black text-slate-900">新增交易</Text>
+              <TouchableOpacity onPress={() => setModalVisible(false)} className="w-9 h-9 items-center justify-center">
+                <X size={22} color="#64748b" />
+              </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <View className="flex-row bg-slate-100 rounded-xl p-1 mb-6">
-                <TouchableOpacity onPress={() => setType('expense')} className={`flex-1 py-2 rounded-lg items-center ${type === 'expense' ? 'bg-white shadow-sm' : ''}`}>
-                  <Text className={`font-bold ${type === 'expense' ? 'text-red-500' : 'text-slate-500'}`}>支出</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => setType('income')} className={`flex-1 py-2 rounded-lg items-center ${type === 'income' ? 'bg-white shadow-sm' : ''}`}>
-                  <Text className={`font-bold ${type === 'income' ? 'text-emerald-500' : 'text-slate-500'}`}>收入</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* 🌟 全新日期選擇區塊 🌟 */}
-              <Text className="text-slate-500 mb-2 font-medium">選擇日期</Text>
-              <View className="mb-6 flex-row items-center">
-                {Platform.OS === 'ios' ? (
-                  // iOS 官方標準最美外觀：直接內嵌緊湊型小按鈕滾輪
-                  <DateTimePicker
-                    value={formDate}
-                    mode="date"
-                    display="default"
-                    onChange={onDateChange}
-                    locale="zh-Hant"
-                  />
-                ) : (
-                  // Android 官方規範：點擊按鈕彈出全螢幕日曆對話框
-                  <>
-                    <TouchableOpacity 
-                      onPress={() => setShowAndroidDatePicker(true)}
-                      className="flex-row items-center bg-slate-50 border border-slate-200 rounded-xl p-4 flex-1 shadow-sm active:bg-slate-100"
-                    >
-                      <CalendarIcon size={18} color="#4F46E5" />
-                      <Text className="ml-3 font-bold text-slate-700 text-base">
-                        {formDate.toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric' })}
-                      </Text>
-                    </TouchableOpacity>
-                    {showAndroidDatePicker && (
-                      <DateTimePicker
-                        value={formDate}
-                        mode="date"
-                        display="default"
-                        onChange={onDateChange}
-                      />
-                    )}
-                  </>
-                )}
-              </View>
-
-              <Text className="text-slate-500 mb-2 font-medium">金額 (RM)</Text>
-              <TextInput 
-                value={amount} onChangeText={setAmount} keyboardType="numeric"
-                className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-2xl font-bold mb-6 text-slate-800"
-                placeholder="0.00"
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
+              <FilterBar options={[...TYPE_OPTIONS]} value={type} onChange={(value) => setType(value)} />
+              <Text className="text-sm font-bold text-slate-500 mb-2">帳戶</Text>
+              <FilterBar
+                options={data.accounts.map((account) => ({ label: account.name, value: account.id }))}
+                value={accountId ?? data.accounts[0]?.id}
+                onChange={setAccountId}
               />
 
-              <Text className="text-slate-500 mb-2 font-medium">選擇類別</Text>
-              <View className="flex-row flex-wrap justify-between mb-6">
-                {categories.filter((c: any) => c.type === type).map((cat: any) => (
-                  <TouchableOpacity 
-                    key={cat.id} onPress={() => setSelectedCategoryId(cat.id.toString())}
-                    className={`w-[31%] p-3 rounded-xl mb-3 items-center border ${selectedCategoryId === cat.id.toString() ? 'bg-indigo-50 border-indigo-500' : 'bg-white border-slate-200'}`}
-                  >
-                    <Text className={`font-bold mt-1 ${selectedCategoryId === cat.id.toString() ? 'text-indigo-600' : 'text-slate-600'}`}>{cat.name}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+              {type === 'transfer' && (
+                <>
+                  <Text className="text-sm font-bold text-slate-500 mb-2">轉入帳戶</Text>
+                  <FilterBar
+                    options={data.accounts.map((account) => ({ label: account.name, value: account.id }))}
+                    value={toAccountId ?? data.accounts[0]?.id}
+                    onChange={setToAccountId}
+                  />
+                </>
+              )}
+
+              <Text className="text-sm font-bold text-slate-500 mb-2">幣別</Text>
+              <FilterBar options={[...CURRENCY_OPTIONS]} value={currency} onChange={setCurrency} />
+
+              <Text className="text-sm font-bold text-slate-500 mb-2">金額</Text>
+              <TextInput
+                value={amount}
+                onChangeText={setAmount}
+                keyboardType="numeric"
+                placeholder="0.00"
+                className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-2xl font-black text-slate-900 mb-4"
+              />
+
+              {type !== 'transfer' && (
+                <>
+                  <Text className="text-sm font-bold text-slate-500 mb-2">類別</Text>
+                  {categories.length === 0 ? (
+                    <EmptyState title="沒有可用類別" message="請先到預算頁建立收入/支出類別。" />
+                  ) : (
+                    <View className="flex-row flex-wrap gap-2 mb-4">
+                      {categories.map((category) => {
+                        const selected = categoryId === category.id;
+                        return (
+                          <TouchableOpacity
+                            key={category.id}
+                            onPress={() => setCategoryId(category.id)}
+                            className={`px-4 py-3 rounded-2xl border ${
+                              selected ? 'bg-indigo-50 border-indigo-500' : 'bg-white border-slate-200'
+                            }`}
+                          >
+                            <Text className={`font-bold ${selected ? 'text-indigo-600' : 'text-slate-600'}`}>
+                              {category.name}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  )}
+                </>
+              )}
+
+              <Text className="text-sm font-bold text-slate-500 mb-2">日期</Text>
+              <TouchableOpacity
+                onPress={() => setShowDatePicker(true)}
+                className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-4"
+              >
+                <Text className="font-bold text-slate-700">{date.toLocaleDateString('zh-TW')}</Text>
+              </TouchableOpacity>
+              {showDatePicker && (
+                <DateTimePicker
+                  value={date}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={(_, selected) => {
+                    if (Platform.OS === 'android') setShowDatePicker(false);
+                    if (selected) setDate(selected);
+                  }}
+                />
+              )}
 
               {type === 'income' && (
-                <TouchableOpacity onPress={() => setIsSavings(!isSavings)} className="flex-row items-center mb-6 bg-emerald-50 p-4 rounded-xl border border-emerald-100">
-                  <View className={`w-6 h-6 rounded border items-center justify-center mr-3 ${isSavings ? 'bg-emerald-500 border-emerald-500' : 'bg-white border-slate-300'}`}>
-                    {isSavings && <CheckCircle color="white" size={16} />}
-                  </View>
-                  <Text className="font-bold text-emerald-800">標記為儲蓄項目</Text>
+                <TouchableOpacity
+                  onPress={() => setIsSavings((prev) => !prev)}
+                  className={`border rounded-2xl p-4 mb-4 ${isSavings ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-200'}`}
+                >
+                  <Text className={`font-bold ${isSavings ? 'text-emerald-700' : 'text-slate-600'}`}>
+                    {isSavings ? '已標記為儲蓄收入' : '標記為儲蓄收入'}
+                  </Text>
                 </TouchableOpacity>
               )}
 
-              <Text className="text-slate-500 mb-2 font-medium">備註 (選填)</Text>
-              <TextInput 
-                value={note} onChangeText={setNote}
-                className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-slate-800 mb-8"
-                placeholder="寫點什麼備註吧..."
+              <Text className="text-sm font-bold text-slate-500 mb-2">備註</Text>
+              <TextInput
+                value={note}
+                onChangeText={setNote}
+                placeholder="寫點備註..."
+                className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-slate-800 mb-5"
               />
 
-              {/* 🌟 底部並排按鈕：支援編輯模式下的「刪除」功能 */}
-              <View className="flex-row mt-2 mb-8 gap-3">
-                {editingTransaction && (
-                  <TouchableOpacity 
-                    onPress={handleDeleteTransaction} 
-                    className="flex-1 bg-rose-50 border border-rose-200 rounded-xl p-4 items-center active:bg-rose-100"
-                  >
-                    <Text className="text-rose-600 font-bold text-lg">刪除</Text>
-                  </TouchableOpacity>
-                )}
-                
-                <TouchableOpacity 
-                  onPress={handleSaveTransaction} 
-                  className={`bg-indigo-600 rounded-xl p-4 items-center ${editingTransaction ? 'flex-1' : 'w-full'} active:bg-indigo-700`}
-                >
-                  <Text className="text-white font-bold text-lg">儲存記錄</Text>
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity
+                onPress={handleSave}
+                disabled={saveEntry.isPending}
+                className="bg-indigo-600 rounded-2xl p-4 items-center"
+              >
+                <Text className="text-white font-black text-base">
+                  {saveEntry.isPending ? '儲存中...' : '儲存交易'}
+                </Text>
+              </TouchableOpacity>
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>
 
-      <CustomAlert visible={alertConfig?.visible || false} title={alertConfig.title} message={alertConfig.message} type={alertConfig.type} onClose={() => setAlertConfig(prev => ({ ...prev, visible: false }))} />
+      <CustomAlert config={alertConfig} hideAlert={() => setAlertConfig((prev) => ({ ...prev, visible: false }))} />
     </View>
   );
 }

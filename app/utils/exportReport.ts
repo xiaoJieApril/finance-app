@@ -1,22 +1,10 @@
-import * as FileSystem from 'expo-file-system';
+import { File, Paths } from 'expo-file-system';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import { Transaction } from '@/type';
 
-// 假設你的 Transaction 型別長這樣，請替換成你真實的型別
-type Transaction = {
-  id: number;
-  date: string;
-  amount: number;
-  note: string;
-  category: { name: string; type: 'expense' | 'income' };
-};
-
-/**
- * 匯出成 PDF
- */
 export const exportToPDF = async (transactions: Transaction[], title: string) => {
   try {
-    // 1. 動態生成 HTML 內容
     const tableRows = transactions.map(tx => `
       <tr>
         <td style="padding: 8px; border-bottom: 1px solid #ddd;">${tx.date}</td>
@@ -56,10 +44,8 @@ export const exportToPDF = async (transactions: Transaction[], title: string) =>
       </html>
     `;
 
-    // 2. 將 HTML 轉成 PDF
     const { uri } = await Print.printToFileAsync({ html, base64: false });
 
-    // 3. 呼叫系統分享/儲存
     if (await Sharing.isAvailableAsync()) {
       await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
     }
@@ -68,34 +54,26 @@ export const exportToPDF = async (transactions: Transaction[], title: string) =>
   }
 };
 
-/**
- * 匯出成 Excel (CSV 格式)
- */
 export const exportToCSV = async (transactions: Transaction[], title: string) => {
   try {
-    // 1. 組合 CSV 字串，加上 \uFEFF 是為了讓 Excel 正確識別 UTF-8 (避免中文亂碼)
     let csvString = '\uFEFF日期,類別,類型,金額,備註\n';
     
     transactions.forEach(tx => {
       const typeStr = tx.category?.type === 'income' ? '收入' : '支出';
       const categoryName = tx.category?.name || '未分類';
-      const note = tx.note ? tx.note.replace(/,/g, '，') : ''; // 避免備註裡的逗號破壞 CSV 格式
+      const note = tx.note ? tx.note.replace(/,/g, '，') : '';
       
       csvString += `${tx.date},${categoryName},${typeStr},${tx.amount},${note}\n`;
     });
 
-    // 2. 定義檔案路徑
     const filename = `${title.replace(/\s/g, '_')}_報表.csv`;
-    const fileUri = `${FileSystem.documentDirectory}${filename}`;
+    const file = new File(Paths.document, filename);
 
-    // 3. 寫入檔案
-    await FileSystem.writeAsStringAsync(fileUri, csvString, {
-      encoding: FileSystem.EncodingType.UTF8,
-    });
+    file.create({ overwrite: true });
+    file.write(csvString);
 
-    // 4. 呼叫系統分享/儲存
     if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(fileUri, {
+      await Sharing.shareAsync(file.uri, {
         mimeType: 'text/csv',
         dialogTitle: '匯出財務報表',
       });
