@@ -1,6 +1,6 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
-import { Bell, Bot, ChevronRight, PieChart } from 'lucide-react-native';
+import { Bell, BellRing, CalendarClock, ChevronRight, Shield, WalletCards } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -118,32 +118,58 @@ export default function ProfileScreen() {
             />
           )}
 
-          {/* AI 財務復盤 */}
           <TouchableOpacity
-            onPress={() => router.push('../ai-agent')}
+            onPress={() => router.push('../accounts')}
             className="flex-row items-center bg-white p-4 rounded-2xl mb-4 shadow-sm border border-slate-100"
           >
-            <View className="w-10 h-10 bg-violet-50 rounded-full items-center justify-center mr-4">
-              <Bot color="#7c3aed" size={20} />
+            <View className="w-10 h-10 bg-indigo-50 rounded-full items-center justify-center mr-4">
+              <WalletCards color="#4f46e5" size={20} />
             </View>
             <View className="flex-1">
-              <Text className="text-slate-800 font-bold text-lg">AI 財務復盤</Text>
-              <Text className="text-slate-400 text-xs mt-0.5">每週 / 每月智能復盤報告</Text>
+              <Text className="text-slate-800 font-bold text-lg">帳戶管理</Text>
+              <Text className="text-slate-400 text-xs mt-0.5">現金、銀行、電子錢包與信用卡</Text>
             </View>
             <ChevronRight color="#cbd5e1" size={20} />
           </TouchableOpacity>
 
-          {/* 數據統計與分析 */}
           <TouchableOpacity
-            onPress={() => router.push('../analytics')}
+            onPress={() => router.push('../recurring')}
             className="flex-row items-center bg-white p-4 rounded-2xl mb-4 shadow-sm border border-slate-100"
           >
-            <View className="w-10 h-10 bg-indigo-50 rounded-full items-center justify-center mr-4">
-              <PieChart color="#4f46e5" size={20} />
+            <View className="w-10 h-10 bg-amber-50 rounded-full items-center justify-center mr-4">
+              <CalendarClock color="#d97706" size={20} />
             </View>
-            <Text className="flex-1 text-slate-800 font-bold text-lg">數據統計與分析</Text>
+            <View className="flex-1">
+              <Text className="text-slate-800 font-bold text-lg">固定帳單與訂閱</Text>
+              <Text className="text-slate-400 text-xs mt-0.5">管理房租、薪水、訂閱與到期提醒</Text>
+            </View>
             <ChevronRight color="#cbd5e1" size={20} />
           </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => router.push('../notification-imports')}
+            className="flex-row items-center bg-white p-4 rounded-2xl mb-4 shadow-sm border border-slate-100"
+          >
+            <View className="w-10 h-10 bg-teal-50 rounded-full items-center justify-center mr-4">
+              <BellRing color="#0f766e" size={20} />
+            </View>
+            <View className="flex-1">
+              <Text className="text-slate-800 font-bold text-lg">通知輔助記帳</Text>
+              <Text className="text-slate-400 text-xs mt-0.5">讀取銀行/錢包通知並建立待確認流水</Text>
+            </View>
+            <ChevronRight color="#cbd5e1" size={20} />
+          </TouchableOpacity>
+
+          <View className="flex-row items-center bg-white p-4 rounded-2xl mb-4 shadow-sm border border-slate-100">
+            <View className="w-10 h-10 bg-emerald-50 rounded-full items-center justify-center mr-4">
+              <Shield color="#059669" size={20} />
+            </View>
+            <View className="flex-1">
+              <Text className="text-slate-800 font-bold text-lg">隱私保護</Text>
+              <Text className="text-slate-400 text-xs mt-0.5">.env 已從 Git 追蹤移除並加入 ignore</Text>
+            </View>
+            <ChevronRight color="#cbd5e1" size={20} />
+          </View>
 
           <CustomButton
             title="登出帳號"

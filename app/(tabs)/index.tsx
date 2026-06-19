@@ -1,10 +1,9 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
-import { Bell, Plus, User, X } from 'lucide-react-native';
+import { Bell, Coffee, Plus, ShieldCheck, Utensils, User, X } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -23,6 +22,7 @@ import { SummaryMetric } from '@/components/finance/SummaryMetric';
 import { TransactionRow } from '@/components/finance/TransactionRow';
 import { CustomAlert, AlertConfig } from '@/components/ui/CustomAlert';
 import { useFinanceOverview } from '@/hooks/useFinanceOverview';
+import { useNotificationImports } from '@/hooks/useNotificationImports';
 import { CurrencyCode, TransactionType } from '@/type';
 import { formatMoney } from '@/utils/finance';
 
@@ -39,9 +39,17 @@ const CURRENCY_OPTIONS = [
   { label: 'EUR', value: 'EUR' },
 ] as const;
 
+const QUICK_TEMPLATES = [
+  { label: '早餐', amount: '8', note: '早餐', icon: Coffee },
+  { label: '午餐', amount: '15', note: '午餐', icon: Utensils },
+  { label: '交通', amount: '6', note: '交通' },
+  { label: '咖啡', amount: '12', note: '咖啡', icon: Coffee },
+];
+
 export default function OverviewScreen() {
   const router = useRouter();
   const { overview, financeData, saveEntry, isLoading } = useFinanceOverview();
+  const { pendingImports } = useNotificationImports();
   const data = financeData.data;
 
   const [modalVisible, setModalVisible] = useState(false);
@@ -80,6 +88,16 @@ export default function OverviewScreen() {
     setNote('');
     setDate(new Date());
     setIsSavings(false);
+    setModalVisible(true);
+  };
+
+  const applyTemplate = (template: (typeof QUICK_TEMPLATES)[number]) => {
+    setType('expense');
+    setAmount(template.amount);
+    setNote(template.note);
+    const expenseCategories = data?.categories.filter((category) => category.type === 'expense') ?? [];
+    const matched = expenseCategories.find((category) => template.note.includes(category.name) || category.name.includes(template.note));
+    setCategoryId(matched?.id ?? expenseCategories[0]?.id ?? null);
     setModalVisible(true);
   };
 
@@ -159,6 +177,21 @@ export default function OverviewScreen() {
           </View>
         )}
 
+        {Boolean(pendingImports.data?.length) && (
+          <TouchableOpacity
+            onPress={() => router.push('../notification-imports')}
+            className="bg-teal-50 border border-teal-100 rounded-2xl p-4 mb-4 flex-row items-center"
+          >
+            <View className="w-10 h-10 rounded-xl bg-white items-center justify-center mr-3">
+              <Bell size={18} color="#0f766e" />
+            </View>
+            <View className="flex-1">
+              <Text className="font-black text-teal-900">有 {pendingImports.data?.length} 筆通知待確認</Text>
+              <Text className="text-xs text-teal-700 mt-1">檢查銀行或錢包通知，確認後才會正式入帳。</Text>
+            </View>
+          </TouchableOpacity>
+        )}
+
         <View className="flex-row gap-3 mb-3">
           <SummaryMetric label="收入" value={formatMoney(overview.cashFlow.income)} tone="income" />
           <SummaryMetric label="支出" value={formatMoney(overview.cashFlow.expense)} tone="expense" />
@@ -183,6 +216,81 @@ export default function OverviewScreen() {
             {formatMoney(overview.totalBudgetSpent)} / {formatMoney(overview.totalBudget)}
           </Text>
         </View>
+
+        <View className="bg-white border border-slate-100 rounded-2xl p-4 mb-6">
+          <View className="flex-row items-center justify-between mb-2">
+            <Text className="font-bold text-slate-800">月底現金流預測</Text>
+            <Text
+              className={`font-black ${
+                overview.forecast.status === 'danger'
+                  ? 'text-rose-600'
+                  : overview.forecast.status === 'tight'
+                    ? 'text-amber-600'
+                    : 'text-emerald-600'
+              }`}
+            >
+              {overview.forecast.status === 'danger'
+                ? '可能透支'
+                : overview.forecast.status === 'tight'
+                  ? '偏緊'
+                  : '安全'}
+            </Text>
+          </View>
+          <Text className="text-3xl font-black text-slate-900 mb-2">
+            {formatMoney(overview.forecast.projectedBalance)}
+          </Text>
+          <Text className="text-xs text-slate-400">
+            剩餘固定收入 {formatMoney(overview.forecast.recurringIncome)}，固定支出 {formatMoney(overview.forecast.recurringExpense)}
+          </Text>
+        </View>
+
+        <View className="bg-white border border-slate-100 rounded-2xl p-4 mb-6">
+          <View className="flex-row items-center mb-3">
+            <View className="w-10 h-10 rounded-xl bg-emerald-50 items-center justify-center mr-3">
+              <ShieldCheck size={20} color="#059669" />
+            </View>
+            <View className="flex-1">
+              <Text className="font-bold text-slate-800">財務健康分數</Text>
+              <Text className="text-xs text-slate-400">依預算、儲蓄率、帳單壓力與現金流估算</Text>
+            </View>
+            <Text
+              className={`text-2xl font-black ${
+                overview.health.status === 'healthy'
+                  ? 'text-emerald-600'
+                  : overview.health.status === 'watch'
+                    ? 'text-amber-600'
+                    : 'text-rose-600'
+              }`}
+            >
+              {overview.health.score}
+            </Text>
+          </View>
+          <View className="h-2 bg-slate-100 rounded-full overflow-hidden">
+            <View className="h-full bg-emerald-500 rounded-full" style={{ width: `${overview.health.score}%` }} />
+          </View>
+        </View>
+
+        <SectionHeader title="快速記帳" />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-6">
+          {QUICK_TEMPLATES.map((template) => {
+            const Icon = template.icon;
+            return (
+              <TouchableOpacity
+                key={template.label}
+                onPress={() => applyTemplate(template)}
+                className="bg-white border border-slate-100 rounded-2xl p-4 mr-3 min-w-[105px]"
+              >
+                {Icon && (
+                  <View className="w-9 h-9 rounded-xl bg-indigo-50 items-center justify-center mb-3">
+                    <Icon size={18} color="#4f46e5" />
+                  </View>
+                )}
+                <Text className="font-black text-slate-800">{template.label}</Text>
+                <Text className="text-xs text-slate-400 mt-1">RM {template.amount}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
 
         <SectionHeader title="帳戶餘額" />
         <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-6">
@@ -213,7 +321,7 @@ export default function OverviewScreen() {
           </View>
         )}
 
-        <SectionHeader title="預算風險" actionLabel="查看全部" onAction={() => router.push('/budget')} />
+        <SectionHeader title="預算風險" actionLabel="查看全部" onAction={() => router.push('./budget')} />
         {overview.budgets.length === 0 ? (
           <EmptyState title="尚未設定預算" message="到預算頁為主要支出類別設定月限額。" />
         ) : (

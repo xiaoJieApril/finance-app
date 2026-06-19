@@ -91,6 +91,26 @@ create table if not exists public.exchange_rates (
   unique(base_currency, quote_currency, rate_date, provider)
 );
 
+create table if not exists public.notification_imports (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade,
+  source_app text not null,
+  source_package text not null,
+  notification_title text,
+  notification_text_preview text not null,
+  notification_hash text not null,
+  parsed_type text check (parsed_type in ('income', 'expense', 'transfer')),
+  parsed_amount numeric,
+  parsed_currency text not null default 'MYR',
+  parsed_merchant text,
+  parsed_account_hint text,
+  occurred_at timestamptz not null,
+  status text not null default 'pending' check (status in ('pending', 'confirmed', 'ignored', 'duplicate')),
+  confirmed_entry_id uuid references public.transaction_entries(id) on delete set null,
+  created_at timestamptz not null default now(),
+  unique(user_id, notification_hash)
+);
+
 alter table public.accounts enable row level security;
 alter table public.finance_categories enable row level security;
 alter table public.transaction_entries enable row level security;
@@ -98,6 +118,7 @@ alter table public.budgets enable row level security;
 alter table public.savings_goals enable row level security;
 alter table public.recurring_items enable row level security;
 alter table public.exchange_rates enable row level security;
+alter table public.notification_imports enable row level security;
 
 do $$
 begin
@@ -140,7 +161,13 @@ begin
     create policy "exchange_rates insertable" on public.exchange_rates
       for insert with check (true);
   end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'notification_imports' and policyname = 'notification_imports own rows') then
+    create policy "notification_imports own rows" on public.notification_imports
+      for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+  end if;
 end $$;
 
 create index if not exists idx_transaction_entries_user_date on public.transaction_entries(user_id, date desc);
 create index if not exists idx_recurring_items_due on public.recurring_items(user_id, next_due_date);
+create index if not exists idx_notification_imports_status on public.notification_imports(user_id, status, occurred_at desc);

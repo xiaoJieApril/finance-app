@@ -38,7 +38,7 @@ export default function HistoryScreen() {
   const [selectedEntry, setSelectedEntry] = useState<TransactionEntry | null>(null);
   const [alertConfig, setAlertConfig] = useState<AlertConfig>({ visible: false, title: '', message: '', type: 'info' });
 
-  const entries = financeData.data?.entries ?? [];
+  const entries = useMemo(() => financeData.data?.entries ?? [], [financeData.data?.entries]);
   const filteredEntries = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return entries.filter((entry) => {

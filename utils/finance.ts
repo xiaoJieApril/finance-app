@@ -101,6 +101,73 @@ export function getUpcomingRecurringItems(items: RecurringItem[], days = 14) {
   });
 }
 
+export function getRemainingMonthRecurringItems(items: RecurringItem[], month = new Date()) {
+  const now = new Date();
+  const end = new Date(month.getFullYear(), month.getMonth() + 1, 0, 23, 59, 59, 999);
+  now.setHours(0, 0, 0, 0);
+
+  return items.filter((item) => {
+    const due = new Date(item.next_due_date);
+    return item.is_active && due >= now && due <= end;
+  });
+}
+
+export function calculateCashFlowForecast(
+  netWorth: number,
+  recurringItems: RecurringItem[],
+  month = new Date(),
+) {
+  const remainingRecurringItems = getRemainingMonthRecurringItems(recurringItems, month);
+  const recurringIncome = remainingRecurringItems
+    .filter((item) => item.type === 'income')
+    .reduce((sum, item) => sum + item.amount, 0);
+  const recurringExpense = remainingRecurringItems
+    .filter((item) => item.type === 'expense')
+    .reduce((sum, item) => sum + item.amount, 0);
+  const projectedBalance = netWorth + recurringIncome - recurringExpense;
+  const status =
+    projectedBalance < 0
+      ? 'danger'
+      : projectedBalance < Math.max(recurringExpense * 0.2, 300)
+        ? 'tight'
+        : 'safe';
+
+  return {
+    recurringIncome,
+    recurringExpense,
+    projectedBalance,
+    status,
+    remainingRecurringItems,
+  };
+}
+
+export function calculateFinancialHealth(params: {
+  income: number;
+  expense: number;
+  budgetUsage: number;
+  recurringExpense: number;
+  netWorth: number;
+  projectedBalance: number;
+}) {
+  const { income, expense, budgetUsage, recurringExpense, netWorth, projectedBalance } = params;
+  const savingsRate = income > 0 ? Math.max((income - expense) / income, 0) : 0;
+  const billPressure = netWorth > 0 ? recurringExpense / netWorth : recurringExpense > 0 ? 1 : 0;
+
+  const budgetScore = Math.max(0, 35 - Math.max(budgetUsage - 0.75, 0) * 100);
+  const savingsScore = Math.min(30, savingsRate * 100);
+  const cashFlowScore = projectedBalance >= 0 ? 25 : 0;
+  const billScore = Math.max(0, 10 - billPressure * 20);
+  const score = Math.round(Math.min(100, budgetScore + savingsScore + cashFlowScore + billScore));
+  const status = score >= 80 ? 'healthy' : score >= 55 ? 'watch' : 'risk';
+
+  return {
+    score,
+    status,
+    savingsRate,
+    billPressure,
+  };
+}
+
 export function calculateGoalProgress(goals: SavingsGoal[]) {
   return goals.map((goal) => ({
     ...goal,

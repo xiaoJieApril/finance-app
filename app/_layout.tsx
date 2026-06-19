@@ -49,6 +49,8 @@ export default function RootLayout() {
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="analytics" options={{ headerShown: false }} />
         <Stack.Screen name="ai-agent" options={{ headerShown: false }} />
+        <Stack.Screen name="accounts" options={{ headerShown: false }} />
+        <Stack.Screen name="recurring" options={{ headerShown: false }} />
       </Stack>
     </QueryClientProvider>
   );

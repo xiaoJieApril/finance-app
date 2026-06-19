@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import { Category, Transaction } from '../type';
+import { Category, RecurringItem, Transaction } from '../type';
 
 export type NotificationSettings = {
   dailyReminderEnabled: boolean;
@@ -11,6 +11,7 @@ export type NotificationSettings = {
 };
 
 const DAILY_REMINDER_ID = 'daily-log-reminder';
+const RECURRING_REMINDER_PREFIX = 'recurring-reminder';
 const BUDGET_ALERTS_KEY = '@budget_alerts_sent';
 
 type BudgetThreshold = 80 | 90 | 100;
@@ -79,6 +80,48 @@ export async function rescheduleDailyReminder(settings: NotificationSettings) {
       minute: settings.dailyReminderMinute,
     },
   });
+}
+
+export async function rescheduleRecurringReminders(items: RecurringItem[]) {
+  if (Platform.OS === 'web') return;
+
+  const granted = await requestNotificationPermissions();
+  if (!granted) return;
+
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  await Promise.all(
+    scheduled
+      .filter((item) => item.identifier.startsWith(RECURRING_REMINDER_PREFIX))
+      .map((item) => Notifications.cancelScheduledNotificationAsync(item.identifier).catch(() => {})),
+  );
+
+  const now = new Date();
+  const end = new Date();
+  end.setDate(now.getDate() + 14);
+
+  await Promise.all(
+    items
+      .filter((item) => {
+        const due = new Date(item.next_due_date);
+        return item.is_active && due >= now && due <= end;
+      })
+      .map((item) => {
+        const due = new Date(item.next_due_date);
+        due.setHours(9, 0, 0, 0);
+        return Notifications.scheduleNotificationAsync({
+          identifier: `${RECURRING_REMINDER_PREFIX}-${item.id}`,
+          content: {
+            title: item.type === 'income' ? '固定收入提醒' : '固定帳單提醒',
+            body: `${item.name} 即將到期：RM ${item.amount.toFixed(2)}`,
+            sound: true,
+          },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.DATE,
+            date: due,
+          },
+        }).catch(() => {});
+      }),
+  );
 }
 
 function getMonthCategorySpending(
