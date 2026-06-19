@@ -1,24 +1,9 @@
-import { BookOpen, Car, Coffee, Gamepad2, Heart, Landmark, LayoutGrid, Monitor, Plane, ShoppingBag, Utensils, Wallet } from 'lucide-react-native';
+import { Landmark } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { renderCategoryIcon } from '../../constants/categoryIcons';
 import { useTransactions } from '../../hooks/useTransactions';
-
-const renderCategoryIcon = (iconId: string, size = 18, color = '#64748b') => {
-  switch (iconId) {
-    case 'utensils': return <Utensils size={size} color={color} />;
-    case 'heart': return <Heart size={size} color={color} />;
-    case 'book': return <BookOpen size={size} color={color} />;
-    case 'car': return <Car size={size} color={color} />;
-    case 'wallet': return <Wallet size={size} color={color} />;
-    case 'gamepad': return <Gamepad2 size={size} color={color} />;
-    case 'shopping': return <ShoppingBag size={size} color={color} />;
-    case 'coffee': return <Coffee size={size} color={color} />;
-    case 'plane': return <Plane size={size} color={color} />;
-    case 'monitor': return <Monitor size={size} color={color} />;
-    default: return <LayoutGrid size={size} color={color} />;
-  }
-};
 
 export default function SavingsScreen() {
   const { fetchTransactions } = useTransactions();

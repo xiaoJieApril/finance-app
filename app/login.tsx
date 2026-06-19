@@ -2,12 +2,10 @@ import { Wallet } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, SafeAreaView, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { supabase } from '../services/supabase'; // 確保有引入 supabase
-
-// 引入剛才建立的模組
 import { CustomButton } from '../components/ui/CustomButton';
 import { CustomInput } from '../components/ui/CustomInput';
 import { useAuth } from '../hooks/useAuth';
+import { supabase } from '../services/supabase';
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
@@ -25,11 +23,8 @@ export default function LoginScreen() {
     }
   };
 
-  // 🌟 新增這個訪客登入函數
   const handleGuestLogin = async () => {
     try {
-      // 呼叫官方的匿名登入：這會在背景發給你一組虛擬通行證
-      // 你的 Expo Router 守衛會自動偵測到通行證，並直接把你送進主頁！
       const { error } = await supabase.auth.signInAnonymously();
       if (error) throw error;
     } catch (error) {
@@ -45,7 +40,6 @@ export default function LoginScreen() {
         className="flex-1 px-6 justify-center"
         style={{ paddingBottom: insets.bottom }}
       >
-        {/* LOGO 區塊 */}
         <View className="items-center mb-10">
           <View className="bg-indigo-100 p-4 rounded-full mb-4">
             <Wallet size={48} color="#4f46e5" />
@@ -58,7 +52,6 @@ export default function LoginScreen() {
           </Text>
         </View>
 
-        {/* 表單區塊 */}
         <CustomInput 
           label="電子郵件" 
           placeholder="your@email.com"
@@ -93,7 +86,10 @@ export default function LoginScreen() {
           <TouchableOpacity 
             onPress={handleGuestLogin}
             className="mt-4 py-3 items-center border border-slate-300 rounded-2xl active:bg-slate-50"
-          ></TouchableOpacity>
+            disabled={isLoading}
+          >
+            <Text className="font-bold text-slate-600">以訪客身份進入</Text>
+          </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>

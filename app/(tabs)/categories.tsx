@@ -1,28 +1,10 @@
-import { BookOpen, Car, Coffee, Gamepad2, Heart, LayoutGrid, Monitor, Plane, Plus, ShoppingBag, Trash2, Utensils, Wallet, X } from 'lucide-react-native';
+import { Plus, Trash2, X } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CustomButton } from '../../components/ui/CustomButton';
+import { CATEGORY_ICONS, DEFAULT_CATEGORY_ICON, renderCategoryIcon } from '../../constants/categoryIcons';
 import { useTransactions } from '../../hooks/useTransactions';
-
-const AVAILABLE_ICONS = [
-  { id: 'utensils', component: Utensils },
-  { id: 'heart', component: Heart },
-  { id: 'book', component: BookOpen },
-  { id: 'car', component: Car },
-  { id: 'wallet', component: Wallet },
-  { id: 'gamepad', component: Gamepad2 },
-  { id: 'shopping', component: ShoppingBag },
-  { id: 'coffee', component: Coffee },
-  { id: 'plane', component: Plane },
-  { id: 'monitor', component: Monitor },
-];
-
-const renderCategoryIcon = (iconId: string, size = 22, color = '#64748b') => {
-  const target = AVAILABLE_ICONS.find(item => item.id === iconId);
-  const IconComponent = target ? target.component : LayoutGrid; 
-  return <IconComponent size={size} color={color} />;
-};
 
 export default function CategoriesScreen() {
   // 💡 假設你的 useTransactions 包含 updateCategory 和 deleteCategory
@@ -48,7 +30,7 @@ export default function CategoriesScreen() {
     setEditingCategoryId(null);
     setCatName('');
     setCatBudget('');
-    setSelectedIcon('utensils');
+    setSelectedIcon(DEFAULT_CATEGORY_ICON);
     setModalVisible(true);
   };
 
@@ -57,7 +39,7 @@ export default function CategoriesScreen() {
     setEditingCategoryId(category.id);
     setCatName(category.name);
     setCatBudget(category.budget_limit ? category.budget_limit.toString() : '');
-    setSelectedIcon(category.icon || 'utensils');
+    setSelectedIcon(category.icon || DEFAULT_CATEGORY_ICON);
     setModalVisible(true);
   };
 
@@ -161,7 +143,7 @@ export default function CategoriesScreen() {
                 
                 {cat.type === 'expense' && (
                   <Text className="text-xs font-semibold text-indigo-500 mt-2">
-                    {cat.budget_limit > 0 ? `限額: RM ${cat.budget_limit}` : '未設預算'}
+                    {(cat.budget_limit ?? 0) > 0 ? `限額: RM ${cat.budget_limit}` : '未設預算'}
                   </Text>
                 )}
                 {cat.type === 'income' && <Text className="text-xs text-slate-400 mt-2">收入項目</Text>}
@@ -234,7 +216,7 @@ export default function CategoriesScreen() {
 
                 <Text className="text-sm font-semibold text-slate-500 mb-3">選擇圖示</Text>
                 <View className="flex-row flex-wrap gap-3 mb-6">
-                  {AVAILABLE_ICONS.map((item) => {
+                  {CATEGORY_ICONS.map((item) => {
                     const IconComponent = item.component;
                     const isSelected = selectedIcon === item.id;
                     return (
