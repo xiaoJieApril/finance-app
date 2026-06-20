@@ -215,6 +215,14 @@ class ${MODULE_NAME}Package : ReactPackage {
 }
 
 module.exports = function withFinanceNotificationListener(config) {
+  const enabled =
+    process.env.EXPO_PUBLIC_ENABLE_NOTIFICATION_IMPORTS === 'true' ||
+    config.extra?.enableNotificationImports === true;
+
+  if (!enabled) {
+    return config;
+  }
+
   config = withAndroidManifest(config, (manifestConfig) => {
     const packageName = getPackageName(manifestConfig);
     manifestConfig.modResults = ensureService(manifestConfig.modResults, packageName);

@@ -32,6 +32,9 @@ const FINANCE_NOTIFICATION_LISTENER = NativeModules.FinanceNotificationListener 
   | NotificationListenerModule
   | undefined;
 
+const NATIVE_NOTIFICATION_IMPORTS_ENABLED =
+  process.env.EXPO_PUBLIC_ENABLE_NOTIFICATION_IMPORTS === 'true';
+
 const ALLOWED_APP_HINTS = [
   { packageName: 'com.maybank2u.life', name: 'MAE / Maybank' },
   { packageName: 'my.com.maybank2u.m2umobile', name: 'Maybank2u' },
@@ -187,8 +190,12 @@ export function getSupportedNotificationApps() {
   return ALLOWED_APP_HINTS;
 }
 
+export function isNativeNotificationImportEnabled() {
+  return Platform.OS === 'android' && NATIVE_NOTIFICATION_IMPORTS_ENABLED && Boolean(FINANCE_NOTIFICATION_LISTENER);
+}
+
 export async function isNotificationListenerEnabled() {
-  if (Platform.OS !== 'android' || !FINANCE_NOTIFICATION_LISTENER?.isNotificationAccessEnabled) {
+  if (!isNativeNotificationImportEnabled() || !FINANCE_NOTIFICATION_LISTENER?.isNotificationAccessEnabled) {
     return false;
   }
 
@@ -196,7 +203,7 @@ export async function isNotificationListenerEnabled() {
 }
 
 export async function openNotificationListenerSettings() {
-  if (Platform.OS === 'android' && FINANCE_NOTIFICATION_LISTENER?.openNotificationListenerSettings) {
+  if (isNativeNotificationImportEnabled() && FINANCE_NOTIFICATION_LISTENER?.openNotificationListenerSettings) {
     await FINANCE_NOTIFICATION_LISTENER.openNotificationListenerSettings();
     return;
   }
@@ -249,7 +256,7 @@ export async function importNotificationPayload(payload: NotificationImportSourc
 }
 
 export async function drainNativeNotificationImports() {
-  if (Platform.OS !== 'android' || !FINANCE_NOTIFICATION_LISTENER?.consumePendingNotifications) {
+  if (!isNativeNotificationImportEnabled() || !FINANCE_NOTIFICATION_LISTENER?.consumePendingNotifications) {
     return [];
   }
 

@@ -7,7 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "financeapp",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true
     },
@@ -18,7 +17,6 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.xiaojieapril.financeapp"
     },
@@ -53,6 +51,7 @@
     },
     "extra": {
       "router": {},
+      "enableNotificationImports": false,
       "eas": {
         "projectId": "0fb606b1-7c4c-4407-a733-c7ce54255d4b"
       }

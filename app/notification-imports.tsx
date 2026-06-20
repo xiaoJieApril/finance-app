@@ -19,7 +19,7 @@ import { FilterBar } from '@/components/finance/FilterBar';
 import { AlertConfig, CustomAlert } from '@/components/ui/CustomAlert';
 import { useFinanceData } from '@/hooks/useFinanceData';
 import { useNotificationImports } from '@/hooks/useNotificationImports';
-import { getSupportedNotificationApps } from '@/services/notificationImports';
+import { getSupportedNotificationApps, isNativeNotificationImportEnabled } from '@/services/notificationImports';
 import { CurrencyCode, NotificationImport, TransactionEntry, TransactionType } from '@/type';
 import { formatMoney } from '@/utils/finance';
 
@@ -78,6 +78,7 @@ export default function NotificationImportsScreen() {
 
   const pending = pendingImports.data ?? [];
   const supportedApps = useMemo(() => getSupportedNotificationApps(), []);
+  const nativeImportEnabled = isNativeNotificationImportEnabled();
   const categories = useMemo(
     () => data?.categories.filter((category) => category.type === type) ?? [],
     [data?.categories, type],
@@ -187,33 +188,35 @@ export default function NotificationImportsScreen() {
             <View className="flex-1">
               <Text className="font-black text-slate-900">通知讀取權限</Text>
               <Text className="text-xs text-slate-400 mt-0.5">
-                {Platform.OS === 'android'
-                  ? permission.data
-                    ? '已啟用，可讀取 allowlist 金融通知'
-                    : '尚未啟用，需要到 Android 設定授權'
-                  : '此功能只支援 Android'}
+                {Platform.OS !== 'android'
+                  ? '此功能只支援 Android'
+                  : !nativeImportEnabled
+                    ? '此版本未包含 native listener；可用測試樣本或手動記帳'
+                    : permission.data
+                      ? '已啟用，可讀取 allowlist 金融通知'
+                      : '尚未啟用，需要到 Android 設定授權'}
               </Text>
             </View>
             <View
               className={`px-3 py-1 rounded-full ${
-                permission.data ? 'bg-emerald-50' : 'bg-amber-50'
+                nativeImportEnabled && permission.data ? 'bg-emerald-50' : 'bg-amber-50'
               }`}
             >
-              <Text className={`text-xs font-black ${permission.data ? 'text-emerald-600' : 'text-amber-600'}`}>
-                {permission.data ? 'ON' : 'OFF'}
+              <Text className={`text-xs font-black ${nativeImportEnabled && permission.data ? 'text-emerald-600' : 'text-amber-600'}`}>
+                {nativeImportEnabled && permission.data ? 'ON' : 'OFF'}
               </Text>
             </View>
           </View>
 
           <TouchableOpacity
             onPress={openSettings}
-            disabled={Platform.OS !== 'android'}
+            disabled={!nativeImportEnabled}
             className={`rounded-2xl p-4 items-center ${
-              Platform.OS === 'android' ? 'bg-indigo-600' : 'bg-slate-200'
+              nativeImportEnabled ? 'bg-indigo-600' : 'bg-slate-200'
             }`}
           >
-            <Text className="text-white font-black">
-              {Platform.OS === 'android' ? '開啟 Android 通知存取設定' : 'iOS 不支援'}
+            <Text className={nativeImportEnabled ? 'text-white font-black' : 'text-slate-500 font-black'}>
+              {nativeImportEnabled ? '開啟 Android 通知存取設定' : '此版本未啟用通知讀取'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -233,11 +236,16 @@ export default function NotificationImportsScreen() {
         <View className="flex-row gap-3 mb-5">
           <TouchableOpacity
             onPress={() => refreshFromDevice.mutate()}
-            className="flex-1 bg-white border border-slate-100 rounded-2xl p-4"
+            disabled={!nativeImportEnabled}
+            className={`flex-1 border border-slate-100 rounded-2xl p-4 ${
+              nativeImportEnabled ? 'bg-white' : 'bg-slate-100'
+            }`}
           >
             <RefreshCw size={20} color="#4f46e5" />
             <Text className="font-black text-slate-900 mt-3">同步通知</Text>
-            <Text className="text-xs text-slate-400 mt-1">從 Android listener 拉取新通知</Text>
+            <Text className="text-xs text-slate-400 mt-1">
+              {nativeImportEnabled ? '從 Android listener 拉取新通知' : '內測 build 才會啟用'}
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => createSample.mutate()}
