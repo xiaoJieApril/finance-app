@@ -33,11 +33,16 @@ const customStorageAdapter = {
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL as string;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY as string;
 
-if (!supabaseUrl || !supabaseAnonKey) {
+export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+
+if (!isSupabaseConfigured) {
   console.error('缺少 Supabase 環境變數，請檢查 .env 檔案是否配置正確。');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+const safeSupabaseUrl = supabaseUrl || 'https://placeholder.supabase.co';
+const safeSupabaseAnonKey = supabaseAnonKey || 'placeholder-anon-key';
+
+export const supabase = createClient(safeSupabaseUrl, safeSupabaseAnonKey, {
   auth: {
     storage: customStorageAdapter, // 改用我們自定義的 Adapter
     autoRefreshToken: true,

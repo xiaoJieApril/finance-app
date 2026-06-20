@@ -169,5 +169,8 @@ begin
 end $$;
 
 create index if not exists idx_transaction_entries_user_date on public.transaction_entries(user_id, date desc);
+create unique index if not exists idx_transaction_entries_legacy_unique
+  on public.transaction_entries(user_id, legacy_transaction_id)
+  where legacy_transaction_id is not null;
 create index if not exists idx_recurring_items_due on public.recurring_items(user_id, next_due_date);
 create index if not exists idx_notification_imports_status on public.notification_imports(user_id, status, occurred_at desc);

@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CustomButton } from '../components/ui/CustomButton';
 import { CustomInput } from '../components/ui/CustomInput';
 import { useAuth } from '../hooks/useAuth';
-import { supabase } from '../services/supabase';
+import { isSupabaseConfigured, supabase } from '../services/supabase';
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
@@ -24,6 +24,11 @@ export default function LoginScreen() {
   };
 
   const handleGuestLogin = async () => {
+    if (!isSupabaseConfigured) {
+      Alert.alert('設定未完成', '缺少 Supabase 環境變數，請重新設定 EAS env 後 build。');
+      return;
+    }
+
     try {
       const { error } = await supabase.auth.signInAnonymously();
       if (error) throw error;

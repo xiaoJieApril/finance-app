@@ -40,6 +40,10 @@ const DEFAULT_ACCOUNT: FinanceAccount = {
   icon: 'wallet',
 };
 
+function isDefaultAccountId(accountId?: string | null) {
+  return accountId === DEFAULT_ACCOUNT_ID;
+}
+
 function isMissingSchemaError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error ?? '');
   return (
@@ -105,13 +109,31 @@ function attachRelations(
   entries: TransactionEntry[],
   accounts: FinanceAccount[],
   categories: FinanceCategory[],
-) {
+): TransactionEntry[] {
   return entries.map((entry) => ({
     ...entry,
     account: accounts.find((account) => account.id === entry.account_id) ?? null,
     to_account: accounts.find((account) => account.id === entry.to_account_id) ?? null,
     category: categories.find((category) => category.id === entry.category_id) ?? null,
   }));
+}
+
+async function getLegacyTransactionsSafely() {
+  try {
+    return await getTransactions();
+  } catch (error) {
+    if (isMissingSchemaError(error)) return [];
+    throw error;
+  }
+}
+
+async function getLegacyCategoriesSafely() {
+  try {
+    return await getCategories();
+  } catch (error) {
+    if (isMissingSchemaError(error)) return [];
+    throw error;
+  }
 }
 
 async function getCurrentUserId() {
@@ -122,6 +144,143 @@ async function getCurrentUserId() {
 
   if (error || !user) throw new Error('尚未登入，無法儲存資料');
   return user.id;
+}
+
+async function ensureDefaultAccount(): Promise<FinanceAccount> {
+  const user_id = await getCurrentUserId();
+  const { data: existing, error: existingError } = await supabase
+    .from('accounts')
+    .select('*')
+    .eq('user_id', user_id)
+    .eq('name', DEFAULT_ACCOUNT.name)
+    .maybeSingle();
+
+  if (existingError && !isMissingSchemaError(existingError)) throw existingError;
+  if (existing) return existing as FinanceAccount;
+
+  const { data, error } = await supabase
+    .from('accounts')
+    .insert([{ ...DEFAULT_ACCOUNT, id: undefined, user_id }])
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as FinanceAccount;
+}
+
+async function ensureLegacyCategoryMapping(
+  legacyCategories: Category[],
+  financeCategories: FinanceCategory[],
+  userId: string,
+) {
+  const nextCategories = [...financeCategories];
+  const byLegacyId = new Map(
+    nextCategories
+      .filter((category) => category.legacy_category_id)
+      .map((category) => [category.legacy_category_id, category]),
+  );
+
+  for (const legacyCategory of legacyCategories) {
+    if (byLegacyId.has(legacyCategory.id)) continue;
+
+    const payload = {
+      user_id: userId,
+      name: legacyCategory.name,
+      icon: legacyCategory.icon || 'wallet',
+      type: legacyCategory.type,
+      budget_limit: legacyCategory.budget_limit ?? 0,
+      legacy_category_id: legacyCategory.id,
+    };
+
+    const { data, error } = await supabase
+      .from('finance_categories')
+      .insert([payload])
+      .select()
+      .single();
+
+    if (error) throw error;
+    const created = data as FinanceCategory;
+    nextCategories.push(created);
+    byLegacyId.set(legacyCategory.id, created);
+  }
+
+  return nextCategories;
+}
+
+async function migrateLegacyTransactionsToV2(params: {
+  accounts: FinanceAccount[];
+  categories: FinanceCategory[];
+  entries: TransactionEntry[];
+}) {
+  const [legacyTransactions, legacyCategories] = await Promise.all([
+    getLegacyTransactionsSafely(),
+    getLegacyCategoriesSafely(),
+  ]);
+
+  if (legacyTransactions.length === 0) return params;
+
+  const userId = await getCurrentUserId();
+  const accounts = params.accounts.length > 0 ? [...params.accounts] : [await ensureDefaultAccount()];
+  const defaultAccount = accounts[0] ?? (await ensureDefaultAccount());
+  const categories = await ensureLegacyCategoryMapping(legacyCategories, params.categories, userId);
+  const financeCategoryByLegacyId = new Map(
+    categories
+      .filter((category) => category.legacy_category_id)
+      .map((category) => [category.legacy_category_id, category]),
+  );
+  const legacyCategoryById = new Map(legacyCategories.map((category) => [category.id, category]));
+  const existingLegacyIds = new Set(
+    params.entries
+      .map((entry) => entry.legacy_transaction_id)
+      .filter((id): id is number => typeof id === 'number'),
+  );
+  const rows = legacyTransactions
+    .filter((transaction) => !existingLegacyIds.has(transaction.id))
+    .map((transaction) => {
+      const legacyCategory =
+        transaction.category ?? legacyCategoryById.get(Number(transaction.category_id));
+      const financeCategory = legacyCategory
+        ? financeCategoryByLegacyId.get(legacyCategory.id)
+        : null;
+      const type: TransactionType = legacyCategory?.type === 'income' ? 'income' : 'expense';
+
+      return {
+        user_id: userId,
+        type,
+        account_id: defaultAccount.id,
+        category_id: financeCategory?.id ?? null,
+        currency: BASE_CURRENCY,
+        amount: transaction.amount,
+        base_currency: BASE_CURRENCY,
+        base_currency_amount: transaction.amount,
+        exchange_rate: 1,
+        note: transaction.note ?? '',
+        date: transaction.date,
+        is_savings: transaction.is_savings ?? false,
+        legacy_transaction_id: transaction.id,
+      };
+    });
+
+  if (rows.length === 0) {
+    return { accounts, categories, entries: attachRelations(params.entries, accounts, categories) };
+  }
+
+  const { data, error } = await supabase
+    .from('transaction_entries')
+    .insert(rows)
+    .select();
+
+  if (error) throw error;
+
+  return {
+    accounts,
+    categories,
+    entries: attachRelations(
+      [...((data ?? []) as TransactionEntry[]), ...params.entries],
+      accounts,
+      categories,
+    ),
+  };
 }
 
 export async function getTransactions(): Promise<Transaction[]> {
@@ -184,15 +343,22 @@ export async function getFinanceData(): Promise<FinanceData> {
 
     if (error) throw error;
 
-    const accounts = ((accountsResult.data ?? []) as FinanceAccount[]).filter(
+    let accounts = ((accountsResult.data ?? []) as FinanceAccount[]).filter(
       (account) => !account.is_archived,
     );
-    const categories = (categoriesResult.data ?? []) as FinanceCategory[];
-    const entries = attachRelations(
+    if (accounts.length === 0) {
+      accounts = [await ensureDefaultAccount()];
+    }
+    let categories = (categoriesResult.data ?? []) as FinanceCategory[];
+    let entries = attachRelations(
       (entriesResult.data ?? []) as TransactionEntry[],
       accounts,
       categories,
     );
+    const migrated = await migrateLegacyTransactionsToV2({ accounts, categories, entries });
+    accounts = migrated.accounts;
+    categories = migrated.categories;
+    entries = migrated.entries;
     const budgets = ((budgetsResult.data ?? []) as FinanceBudget[]).map((budget) => ({
       ...budget,
       category: categories.find((category) => category.id === budget.category_id) ?? null,
@@ -206,7 +372,7 @@ export async function getFinanceData(): Promise<FinanceData> {
     return {
       source: 'v2',
       baseCurrency: BASE_CURRENCY,
-      accounts: accounts.length > 0 ? accounts : [DEFAULT_ACCOUNT],
+      accounts,
       categories,
       entries,
       budgets,
@@ -246,7 +412,21 @@ export async function createTransaction(newTransaction: Partial<Transaction>) {
     .from('transactions')
     .insert([{ ...newTransaction, user_id }]);
 
-  if (error) throw error;
+  if (error) {
+    const message = error.message ?? '';
+    if (
+      message.includes('user_id') &&
+      (message.includes('schema cache') ||
+        message.includes('Could not find') ||
+        message.includes('column'))
+    ) {
+      const retry = await supabase.from('transactions').insert([newTransaction]);
+      if (retry.error) throw retry.error;
+      return retry.data;
+    }
+
+    throw error;
+  }
   return data;
 }
 
@@ -326,8 +506,17 @@ export type UpsertEntryInput = {
 export async function upsertTransactionEntry(input: UpsertEntryInput) {
   const user_id = await getCurrentUserId();
   const conversion = await convertToBaseCurrency(input.amount, input.currency, BASE_CURRENCY);
+  const account_id = isDefaultAccountId(input.account_id) ? null : input.account_id;
+  const to_account_id = isDefaultAccountId(input.to_account_id) ? null : input.to_account_id;
+
+  if (input.type === 'transfer' && (!account_id || !to_account_id)) {
+    throw new Error('請先建立兩個真實帳戶，再新增轉帳紀錄。');
+  }
+
   const payload = {
     ...input,
+    account_id,
+    to_account_id,
     user_id,
     base_currency: BASE_CURRENCY,
     base_currency_amount: conversion.amount,
