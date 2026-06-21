@@ -6,6 +6,8 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import React, { useEffect } from 'react';
 import { LogBox, Text, View } from 'react-native';
 import { useAuthSession } from '@/hooks/useAuthSession';
+import { useNotificationImportSettings } from '@/hooks/useNotificationImportSettings';
+import { useNotificationImportPrompt } from '@/hooks/useNotificationImportPrompt';
 import { useNotificationPermissions } from '@/hooks/useNotificationPermissions';
 import { isSupabaseConfigured } from '@/services/supabase';
 
@@ -25,12 +27,16 @@ Notifications.setNotificationHandler({
   }),
 });
 
-export default function RootLayout() {
+function AppShell() {
   const { session, isInitialized } = useAuthSession();
+  const { settings: notificationImportSettings } = useNotificationImportSettings();
   const segments = useSegments();
   const router = useRouter();
 
   useNotificationPermissions();
+  useNotificationImportPrompt(
+    Boolean(session && isSupabaseConfigured && (notificationImportSettings.data?.enabled ?? false)),
+  );
 
   useEffect(() => {
     if (!isInitialized) return;
@@ -45,30 +51,36 @@ export default function RootLayout() {
 
   if (!isSupabaseConfigured) {
     return (
-      <QueryClientProvider client={queryClient}>
-        <View className="flex-1 bg-slate-50 px-6 justify-center">
-          <View className="bg-white border border-rose-100 rounded-2xl p-5">
-            <Text className="text-2xl font-black text-slate-900 mb-3">App 設定未完成</Text>
-            <Text className="text-slate-600 leading-6">
-              這個 build 缺少 Supabase 環境變數。請在 EAS 設定
-              EXPO_PUBLIC_SUPABASE_URL 和 EXPO_PUBLIC_SUPABASE_ANON_KEY 後重新 build。
-            </Text>
-          </View>
+      <View className="flex-1 bg-slate-50 px-6 justify-center">
+        <View className="bg-white border border-rose-100 rounded-2xl p-5">
+          <Text className="text-2xl font-black text-slate-900 mb-3">App 設定未完成</Text>
+          <Text className="text-slate-600 leading-6">
+            這個 build 缺少 Supabase 環境變數。請在 EAS 設定
+            EXPO_PUBLIC_SUPABASE_URL 和 EXPO_PUBLIC_SUPABASE_ANON_KEY 後重新 build。
+          </Text>
         </View>
-      </QueryClientProvider>
+      </View>
     );
   }
 
   return (
+    <Stack>
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="login" options={{ headerShown: false }} />
+      <Stack.Screen name="analytics" options={{ headerShown: false }} />
+      <Stack.Screen name="ai-agent" options={{ headerShown: false }} />
+      <Stack.Screen name="accounts" options={{ headerShown: false }} />
+      <Stack.Screen name="recurring" options={{ headerShown: false }} />
+      <Stack.Screen name="notification-imports" options={{ headerShown: false }} />
+      <Stack.Screen name="future-note-imports" options={{ headerShown: false }} />
+    </Stack>
+  );
+}
+
+export default function RootLayout() {
+  return (
     <QueryClientProvider client={queryClient}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="login" options={{ headerShown: false }} />
-        <Stack.Screen name="analytics" options={{ headerShown: false }} />
-        <Stack.Screen name="ai-agent" options={{ headerShown: false }} />
-        <Stack.Screen name="accounts" options={{ headerShown: false }} />
-        <Stack.Screen name="recurring" options={{ headerShown: false }} />
-      </Stack>
+      <AppShell />
     </QueryClientProvider>
   );
 }

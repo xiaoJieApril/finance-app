@@ -216,7 +216,7 @@ class ${MODULE_NAME}Package : ReactPackage {
 
 module.exports = function withFinanceNotificationListener(config) {
   const enabled =
-    process.env.EXPO_PUBLIC_ENABLE_NOTIFICATION_IMPORTS === 'true' ||
+    process.env.FINANCE_ENABLE_NOTIFICATION_LISTENER === 'true' ||
     config.extra?.enableNotificationImports === true;
 
   if (!enabled) {

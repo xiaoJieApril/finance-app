@@ -1,6 +1,6 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
-import { Bell, Coffee, Plus, ShieldCheck, Utensils, User, X } from 'lucide-react-native';
+import { Bell, Coffee, NotebookTabs, Plus, ShieldCheck, Utensils, User, X } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -22,6 +22,7 @@ import { SummaryMetric } from '@/components/finance/SummaryMetric';
 import { TransactionRow } from '@/components/finance/TransactionRow';
 import { CustomAlert, AlertConfig } from '@/components/ui/CustomAlert';
 import { useFinanceOverview } from '@/hooks/useFinanceOverview';
+import { useFutureNoteImports } from '@/hooks/useFutureNoteImports';
 import { useNotificationImports } from '@/hooks/useNotificationImports';
 import { CurrencyCode, TransactionType } from '@/type';
 import { formatMoney } from '@/utils/finance';
@@ -50,6 +51,7 @@ export default function OverviewScreen() {
   const router = useRouter();
   const { overview, financeData, saveEntry, isLoading } = useFinanceOverview();
   const { pendingImports } = useNotificationImports();
+  const { pendingImports: pendingFutureNoteImports } = useFutureNoteImports();
   const data = financeData.data;
 
   const [modalVisible, setModalVisible] = useState(false);
@@ -188,6 +190,23 @@ export default function OverviewScreen() {
             <View className="flex-1">
               <Text className="font-black text-teal-900">有 {pendingImports.data?.length} 筆通知待確認</Text>
               <Text className="text-xs text-teal-700 mt-1">檢查銀行或錢包通知，確認後才會正式入帳。</Text>
+            </View>
+          </TouchableOpacity>
+        )}
+
+        {Boolean(pendingFutureNoteImports.data?.length) && (
+          <TouchableOpacity
+            onPress={() => router.push('../future-note-imports')}
+            className="bg-violet-50 border border-violet-100 rounded-2xl p-4 mb-4 flex-row items-center"
+          >
+            <View className="w-10 h-10 rounded-xl bg-white items-center justify-center mr-3">
+              <NotebookTabs size={18} color="#7c3aed" />
+            </View>
+            <View className="flex-1">
+              <Text className="font-black text-violet-900">
+                有 {pendingFutureNoteImports.data?.length} 筆 Future Note 待匯入
+              </Text>
+              <Text className="text-xs text-violet-700 mt-1">確認後會成為未來日期的支出流水。</Text>
             </View>
           </TouchableOpacity>
         )}

@@ -26,14 +26,12 @@ export type NotificationImportSource = NativeNotificationPayload & {
 };
 
 const STORAGE_KEY = '@notification_imports';
+const SETTINGS_KEY = '@notification_import_settings';
 const PREVIEW_LENGTH = 220;
 
 const FINANCE_NOTIFICATION_LISTENER = NativeModules.FinanceNotificationListener as
   | NotificationListenerModule
   | undefined;
-
-const NATIVE_NOTIFICATION_IMPORTS_ENABLED =
-  process.env.EXPO_PUBLIC_ENABLE_NOTIFICATION_IMPORTS === 'true';
 
 const ALLOWED_APP_HINTS = [
   { packageName: 'com.maybank2u.life', name: 'MAE / Maybank' },
@@ -190,8 +188,29 @@ export function getSupportedNotificationApps() {
   return ALLOWED_APP_HINTS;
 }
 
+export type NotificationImportSettings = {
+  enabled: boolean;
+};
+
+export const DEFAULT_NOTIFICATION_IMPORT_SETTINGS: NotificationImportSettings = {
+  enabled: false,
+};
+
+export async function getNotificationImportSettings() {
+  const raw = await AsyncStorage.getItem(SETTINGS_KEY);
+  if (!raw) return DEFAULT_NOTIFICATION_IMPORT_SETTINGS;
+  return { ...DEFAULT_NOTIFICATION_IMPORT_SETTINGS, ...JSON.parse(raw) } as NotificationImportSettings;
+}
+
+export async function updateNotificationImportSettings(patch: Partial<NotificationImportSettings>) {
+  const current = await getNotificationImportSettings();
+  const next = { ...current, ...patch };
+  await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+  return next;
+}
+
 export function isNativeNotificationImportEnabled() {
-  return Platform.OS === 'android' && NATIVE_NOTIFICATION_IMPORTS_ENABLED && Boolean(FINANCE_NOTIFICATION_LISTENER);
+  return Platform.OS === 'android' && Boolean(FINANCE_NOTIFICATION_LISTENER);
 }
 
 export async function isNotificationListenerEnabled() {

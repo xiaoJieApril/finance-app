@@ -8,6 +8,7 @@ import {
   Modal,
   Platform,
   ScrollView,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -19,6 +20,7 @@ import { FilterBar } from '@/components/finance/FilterBar';
 import { AlertConfig, CustomAlert } from '@/components/ui/CustomAlert';
 import { useFinanceData } from '@/hooks/useFinanceData';
 import { useNotificationImports } from '@/hooks/useNotificationImports';
+import { useNotificationImportSettings } from '@/hooks/useNotificationImportSettings';
 import { getSupportedNotificationApps, isNativeNotificationImportEnabled } from '@/services/notificationImports';
 import { CurrencyCode, NotificationImport, TransactionEntry, TransactionType } from '@/type';
 import { formatMoney } from '@/utils/finance';
@@ -57,6 +59,7 @@ export default function NotificationImportsScreen() {
     markConfirmed,
     openSettings,
   } = useNotificationImports();
+  const { settings, updateSettings } = useNotificationImportSettings();
 
   const data = financeData.data;
   const [selectedImport, setSelectedImport] = useState<NotificationImport | null>(null);
@@ -79,6 +82,7 @@ export default function NotificationImportsScreen() {
   const pending = pendingImports.data ?? [];
   const supportedApps = useMemo(() => getSupportedNotificationApps(), []);
   const nativeImportEnabled = isNativeNotificationImportEnabled();
+  const importFeatureEnabled = settings.data?.enabled ?? false;
   const categories = useMemo(
     () => data?.categories.filter((category) => category.type === type) ?? [],
     [data?.categories, type],
@@ -181,6 +185,24 @@ export default function NotificationImportsScreen() {
         </View>
 
         <View className="bg-white border border-slate-100 rounded-2xl p-4 mb-4">
+          <View className="flex-row items-center justify-between">
+            <View className="flex-1 mr-4">
+              <Text className="font-black text-slate-900">自動偵測交易通知</Text>
+              <Text className="text-xs text-slate-400 mt-1 leading-5">
+                開啟後，讀到支援的銀行/錢包通知時會跳出確認訊息；關閉後不會自動提示。
+              </Text>
+            </View>
+            <Switch
+              value={importFeatureEnabled}
+              onValueChange={(enabled) => updateSettings.mutate({ enabled })}
+              disabled={settings.isLoading || updateSettings.isPending}
+              trackColor={{ false: '#e2e8f0', true: '#99f6e4' }}
+              thumbColor={importFeatureEnabled ? '#0f766e' : '#f8fafc'}
+            />
+          </View>
+        </View>
+
+        <View className="bg-white border border-slate-100 rounded-2xl p-4 mb-4">
           <View className="flex-row items-center mb-3">
             <View className="w-10 h-10 rounded-xl bg-indigo-50 items-center justify-center mr-3">
               <BellRing size={20} color="#4f46e5" />
@@ -236,15 +258,19 @@ export default function NotificationImportsScreen() {
         <View className="flex-row gap-3 mb-5">
           <TouchableOpacity
             onPress={() => refreshFromDevice.mutate()}
-            disabled={!nativeImportEnabled}
+            disabled={!nativeImportEnabled || !importFeatureEnabled}
             className={`flex-1 border border-slate-100 rounded-2xl p-4 ${
-              nativeImportEnabled ? 'bg-white' : 'bg-slate-100'
+              nativeImportEnabled && importFeatureEnabled ? 'bg-white' : 'bg-slate-100'
             }`}
           >
             <RefreshCw size={20} color="#4f46e5" />
             <Text className="font-black text-slate-900 mt-3">同步通知</Text>
             <Text className="text-xs text-slate-400 mt-1">
-              {nativeImportEnabled ? '從 Android listener 拉取新通知' : '內測 build 才會啟用'}
+              {!importFeatureEnabled
+                ? '自動偵測已關閉'
+                : nativeImportEnabled
+                  ? '從 Android listener 拉取新通知'
+                  : '內測 build 才會啟用'}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity

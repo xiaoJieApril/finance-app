@@ -111,6 +111,24 @@ create table if not exists public.notification_imports (
   unique(user_id, notification_hash)
 );
 
+create table if not exists public.future_note_imports (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade,
+  external_id text not null,
+  title text not null,
+  note text,
+  amount numeric not null,
+  currency text not null default 'MYR',
+  due_date timestamptz not null,
+  category_hint text,
+  account_hint text,
+  source_payload jsonb,
+  status text not null default 'pending' check (status in ('pending', 'confirmed', 'ignored', 'duplicate')),
+  confirmed_entry_id uuid references public.transaction_entries(id) on delete set null,
+  created_at timestamptz not null default now(),
+  unique(user_id, external_id)
+);
+
 alter table public.accounts enable row level security;
 alter table public.finance_categories enable row level security;
 alter table public.transaction_entries enable row level security;
@@ -119,6 +137,7 @@ alter table public.savings_goals enable row level security;
 alter table public.recurring_items enable row level security;
 alter table public.exchange_rates enable row level security;
 alter table public.notification_imports enable row level security;
+alter table public.future_note_imports enable row level security;
 
 do $$
 begin
@@ -166,6 +185,11 @@ begin
     create policy "notification_imports own rows" on public.notification_imports
       for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
   end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'future_note_imports' and policyname = 'future_note_imports own rows') then
+    create policy "future_note_imports own rows" on public.future_note_imports
+      for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+  end if;
 end $$;
 
 create index if not exists idx_transaction_entries_user_date on public.transaction_entries(user_id, date desc);
@@ -174,3 +198,4 @@ create unique index if not exists idx_transaction_entries_legacy_unique
   where legacy_transaction_id is not null;
 create index if not exists idx_recurring_items_due on public.recurring_items(user_id, next_due_date);
 create index if not exists idx_notification_imports_status on public.notification_imports(user_id, status, occurred_at desc);
+create index if not exists idx_future_note_imports_status on public.future_note_imports(user_id, status, due_date asc);

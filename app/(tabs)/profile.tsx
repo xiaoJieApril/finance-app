@@ -1,6 +1,6 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
-import { Bell, BellRing, CalendarClock, ChevronRight, Shield, WalletCards } from 'lucide-react-native';
+import { Bell, BellRing, CalendarClock, ChevronRight, NotebookTabs, Shield, WalletCards } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -156,6 +156,20 @@ export default function ProfileScreen() {
             <View className="flex-1">
               <Text className="text-slate-800 font-bold text-lg">通知輔助記帳</Text>
               <Text className="text-slate-400 text-xs mt-0.5">讀取銀行/錢包通知並建立待確認流水</Text>
+            </View>
+            <ChevronRight color="#cbd5e1" size={20} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => router.push('../future-note-imports')}
+            className="flex-row items-center bg-white p-4 rounded-2xl mb-4 shadow-sm border border-slate-100"
+          >
+            <View className="w-10 h-10 bg-violet-50 rounded-full items-center justify-center mr-4">
+              <NotebookTabs color="#7c3aed" size={20} />
+            </View>
+            <View className="flex-1">
+              <Text className="text-slate-800 font-bold text-lg">Future Note 匯入</Text>
+              <Text className="text-slate-400 text-xs mt-0.5">接收未來消費並確認加入流水</Text>
             </View>
             <ChevronRight color="#cbd5e1" size={20} />
           </TouchableOpacity>

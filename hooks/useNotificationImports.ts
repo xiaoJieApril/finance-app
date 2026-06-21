@@ -9,6 +9,7 @@ import {
 } from '@/services/notificationImports';
 import { financeQueryKeys } from '@/services/financeRepository';
 import { NotificationImport, TransactionEntry } from '@/type';
+import { useNotificationImportSettings } from './useNotificationImportSettings';
 
 export const notificationImportQueryKeys = {
   pending: ['notification-imports', 'pending'] as const,
@@ -17,11 +18,15 @@ export const notificationImportQueryKeys = {
 
 export function useNotificationImports() {
   const queryClient = useQueryClient();
+  const { settings } = useNotificationImportSettings();
+  const importsEnabled = settings.data?.enabled ?? true;
 
   const pendingImports = useQuery({
-    queryKey: notificationImportQueryKeys.pending,
+    queryKey: [...notificationImportQueryKeys.pending, importsEnabled],
     queryFn: async () => {
-      await drainNativeNotificationImports();
+      if (importsEnabled) {
+        await drainNativeNotificationImports();
+      }
       return getPendingNotificationImports();
     },
   });
@@ -32,7 +37,10 @@ export function useNotificationImports() {
   });
 
   const refreshFromDevice = useMutation({
-    mutationFn: drainNativeNotificationImports,
+    mutationFn: async () => {
+      if (!importsEnabled) return [];
+      return drainNativeNotificationImports();
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: notificationImportQueryKeys.pending });
       queryClient.invalidateQueries({ queryKey: notificationImportQueryKeys.permission });
