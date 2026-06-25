@@ -1,6 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   archiveAccount,
+  deleteBudget,
+  deleteFinanceCategory,
+  deleteRecurringItem,
+  deleteSavingsGoal,
   deleteTransactionEntry,
   financeQueryKeys,
   getFinanceData,
@@ -11,7 +15,7 @@ import {
   upsertSavingsGoal,
   upsertTransactionEntry,
 } from '@/services/financeRepository';
-import { TransactionEntry } from '@/type';
+import { FinanceCategory, TransactionEntry } from '@/type';
 
 export function useFinanceData() {
   const queryClient = useQueryClient();
@@ -51,8 +55,18 @@ export function useFinanceData() {
     onSuccess: invalidate,
   });
 
+  const removeCategory = useMutation({
+    mutationFn: (category: FinanceCategory) => deleteFinanceCategory(category),
+    onSuccess: invalidate,
+  });
+
   const saveBudget = useMutation({
     mutationFn: upsertBudget,
+    onSuccess: invalidate,
+  });
+
+  const removeBudget = useMutation({
+    mutationFn: deleteBudget,
     onSuccess: invalidate,
   });
 
@@ -61,8 +75,18 @@ export function useFinanceData() {
     onSuccess: invalidate,
   });
 
+  const removeGoal = useMutation({
+    mutationFn: deleteSavingsGoal,
+    onSuccess: invalidate,
+  });
+
   const saveRecurringItem = useMutation({
     mutationFn: upsertRecurringItem,
+    onSuccess: invalidate,
+  });
+
+  const removeRecurringItem = useMutation({
+    mutationFn: deleteRecurringItem,
     onSuccess: invalidate,
   });
 
@@ -73,8 +97,12 @@ export function useFinanceData() {
     saveAccount,
     removeAccount,
     saveCategory,
+    removeCategory,
     saveBudget,
+    removeBudget,
     saveGoal,
+    removeGoal,
     saveRecurringItem,
+    removeRecurringItem,
   };
 }

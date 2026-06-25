@@ -6,8 +6,6 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import React, { useEffect } from 'react';
 import { LogBox, Text, View } from 'react-native';
 import { useAuthSession } from '@/hooks/useAuthSession';
-import { useNotificationImportSettings } from '@/hooks/useNotificationImportSettings';
-import { useNotificationImportPrompt } from '@/hooks/useNotificationImportPrompt';
 import { useNotificationPermissions } from '@/hooks/useNotificationPermissions';
 import { isSupabaseConfigured } from '@/services/supabase';
 
@@ -29,14 +27,10 @@ Notifications.setNotificationHandler({
 
 function AppShell() {
   const { session, isInitialized } = useAuthSession();
-  const { settings: notificationImportSettings } = useNotificationImportSettings();
   const segments = useSegments();
   const router = useRouter();
 
   useNotificationPermissions();
-  useNotificationImportPrompt(
-    Boolean(session && isSupabaseConfigured && (notificationImportSettings.data?.enabled ?? false)),
-  );
 
   useEffect(() => {
     if (!isInitialized) return;
@@ -71,7 +65,6 @@ function AppShell() {
       <Stack.Screen name="ai-agent" options={{ headerShown: false }} />
       <Stack.Screen name="accounts" options={{ headerShown: false }} />
       <Stack.Screen name="recurring" options={{ headerShown: false }} />
-      <Stack.Screen name="notification-imports" options={{ headerShown: false }} />
       <Stack.Screen name="future-note-imports" options={{ headerShown: false }} />
     </Stack>
   );

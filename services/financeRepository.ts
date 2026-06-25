@@ -343,22 +343,30 @@ export async function getFinanceData(): Promise<FinanceData> {
 
     if (error) throw error;
 
-    let accounts = ((accountsResult.data ?? []) as FinanceAccount[]).filter(
-      (account) => !account.is_archived,
-    );
+    let allAccounts = (accountsResult.data ?? []) as FinanceAccount[];
+    let accounts = allAccounts.filter((account) => !account.is_archived);
     if (accounts.length === 0) {
-      accounts = [await ensureDefaultAccount()];
+      const defaultAccount = await ensureDefaultAccount();
+      accounts = [defaultAccount];
+      allAccounts = [
+        ...allAccounts.filter((account) => account.id !== defaultAccount.id),
+        defaultAccount,
+      ];
     }
     let categories = (categoriesResult.data ?? []) as FinanceCategory[];
     let entries = attachRelations(
       (entriesResult.data ?? []) as TransactionEntry[],
-      accounts,
+      allAccounts,
       categories,
     );
     const migrated = await migrateLegacyTransactionsToV2({ accounts, categories, entries });
     accounts = migrated.accounts;
+    allAccounts = [
+      ...allAccounts.filter((account) => !accounts.some((activeAccount) => activeAccount.id === account.id)),
+      ...accounts,
+    ];
     categories = migrated.categories;
-    entries = migrated.entries;
+    entries = attachRelations(migrated.entries, allAccounts, categories);
     const budgets = ((budgetsResult.data ?? []) as FinanceBudget[]).map((budget) => ({
       ...budget,
       category: categories.find((category) => category.id === budget.category_id) ?? null,
@@ -366,7 +374,7 @@ export async function getFinanceData(): Promise<FinanceData> {
     const recurringItems = ((recurringResult.data ?? []) as RecurringItem[]).map((item) => ({
       ...item,
       category: categories.find((category) => category.id === item.category_id) ?? null,
-      account: accounts.find((account) => account.id === item.account_id) ?? null,
+      account: allAccounts.find((account) => account.id === item.account_id) ?? null,
     }));
 
     return {
@@ -476,18 +484,50 @@ export type UpsertFinanceCategoryInput = {
   icon: string;
   type: CategoryType;
   budget_limit?: number;
+  legacy_category_id?: number;
 };
 
 export async function upsertFinanceCategory(input: UpsertFinanceCategoryInput) {
   const user_id = await getCurrentUserId();
   const payload = { ...input, user_id };
   const query = supabase.from('finance_categories');
-  const { data, error } = input.id
-    ? await query.update(payload).eq('id', input.id).select().single()
-    : await query.insert([payload]).select().single();
 
+  try {
+    const { data, error } = input.id
+      ? await query.update(payload).eq('id', input.id).select().single()
+      : await query.insert([payload]).select().single();
+
+    if (error) throw error;
+    return data as FinanceCategory;
+  } catch (error) {
+    if (!isMissingSchemaError(error)) throw toError(error);
+
+    const legacyPayload = {
+      name: input.name,
+      icon: input.icon,
+      type: input.type,
+      budget_limit: input.budget_limit,
+    };
+    if (input.legacy_category_id) {
+      const updated = await editCategory({ id: input.legacy_category_id, ...legacyPayload });
+      const row = Array.isArray(updated) ? updated[0] : null;
+      return mapLegacyCategory((row ?? { id: input.legacy_category_id, ...legacyPayload }) as Category);
+    }
+
+    const created = await createCategory(legacyPayload);
+    const row = Array.isArray(created) ? created[0] : null;
+    if (!row) return mapLegacyCategory({ id: Date.now(), ...legacyPayload } as Category);
+    return mapLegacyCategory(row as Category);
+  }
+}
+
+export async function deleteFinanceCategory(category: FinanceCategory) {
+  if (category.legacy_category_id) {
+    return removeCategory(category.legacy_category_id);
+  }
+
+  const { error } = await supabase.from('finance_categories').delete().eq('id', category.id);
   if (error) throw error;
-  return data as FinanceCategory;
 }
 
 export type UpsertEntryInput = {
@@ -541,6 +581,17 @@ export async function upsertTransactionEntry(input: UpsertEntryInput) {
       ? Number(input.category_id.replace('legacy-', ''))
       : undefined;
 
+    if (input.id?.startsWith('legacy-')) {
+      return editTransaction({
+        id: Number(input.id.replace('legacy-', '')),
+        amount: input.amount,
+        note: input.note,
+        date: input.date,
+        category_id: legacyCategoryId,
+        is_savings: input.is_savings,
+      });
+    }
+
     return createTransaction({
       amount: input.amount,
       note: input.note,
@@ -562,14 +613,24 @@ export async function deleteTransactionEntry(entry: TransactionEntry) {
 
 export async function upsertBudget(input: { id?: string; category_id: string; monthly_limit: number }) {
   const user_id = await getCurrentUserId();
-  const payload = { ...input, user_id };
   const query = supabase.from('budgets');
   const { data, error } = input.id
-    ? await query.update(payload).eq('id', input.id).select().single()
-    : await query.insert([payload]).select().single();
+    ? await query.update({ category_id: input.category_id, monthly_limit: input.monthly_limit, user_id }).eq('id', input.id).select().single()
+    : await query
+        .upsert(
+          [{ category_id: input.category_id, monthly_limit: input.monthly_limit, user_id }],
+          { onConflict: 'user_id,category_id' },
+        )
+        .select()
+        .single();
 
   if (error) throw error;
   return data as FinanceBudget;
+}
+
+export async function deleteBudget(id: string) {
+  const { error } = await supabase.from('budgets').delete().eq('id', id);
+  if (error) throw error;
 }
 
 export async function upsertSavingsGoal(input: Partial<SavingsGoal> & { name: string }) {
@@ -584,6 +645,11 @@ export async function upsertSavingsGoal(input: Partial<SavingsGoal> & { name: st
   return data as SavingsGoal;
 }
 
+export async function deleteSavingsGoal(id: string) {
+  const { error } = await supabase.from('savings_goals').delete().eq('id', id);
+  if (error) throw error;
+}
+
 export async function upsertRecurringItem(input: Partial<RecurringItem> & { name: string }) {
   const user_id = await getCurrentUserId();
   const payload = { currency: BASE_CURRENCY, frequency: 'monthly', is_active: true, ...input, user_id };
@@ -594,4 +660,9 @@ export async function upsertRecurringItem(input: Partial<RecurringItem> & { name
 
   if (error) throw error;
   return data as RecurringItem;
+}
+
+export async function deleteRecurringItem(id: string) {
+  const { error } = await supabase.from('recurring_items').delete().eq('id', id);
+  if (error) throw error;
 }

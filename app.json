@@ -43,8 +43,7 @@
       "expo-image",
       "expo-web-browser",
       "@react-native-community/datetimepicker",
-      "expo-sharing",
-      "./plugins/withFinanceNotificationListener"
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -52,7 +51,6 @@
     },
     "extra": {
       "router": {},
-      "enableNotificationImports": false,
       "eas": {
         "projectId": "0fb606b1-7c4c-4407-a733-c7ce54255d4b"
       }

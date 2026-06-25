@@ -1,23 +1,47 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import React, { useState } from 'react';
-import { ActivityIndicator, Modal, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { EmptyState } from '@/components/finance/EmptyState';
 import { SectionHeader } from '@/components/finance/SectionHeader';
 import { AlertConfig, CustomAlert } from '@/components/ui/CustomAlert';
 import { useFinanceOverview } from '@/hooks/useFinanceOverview';
+import { SavingsGoal } from '@/type';
 import { formatMoney } from '@/utils/finance';
 
 export default function GoalsScreen() {
-  const { overview, financeData, saveGoal, isLoading } = useFinanceOverview();
+  const { overview, financeData, saveGoal, removeGoal, isLoading } = useFinanceOverview();
   const data = financeData.data;
   const [modalVisible, setModalVisible] = useState(false);
+  const [editingGoal, setEditingGoal] = useState<SavingsGoal | null>(null);
   const [name, setName] = useState('');
   const [targetAmount, setTargetAmount] = useState('');
   const [currentAmount, setCurrentAmount] = useState('');
   const [targetDate, setTargetDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [alertConfig, setAlertConfig] = useState<AlertConfig>({ visible: false, title: '', message: '', type: 'info' });
+
+  const resetForm = () => {
+    setEditingGoal(null);
+    setName('');
+    setTargetAmount('');
+    setCurrentAmount('');
+    setTargetDate(new Date());
+  };
+
+  const openAddModal = () => {
+    resetForm();
+    setModalVisible(true);
+  };
+
+  const openEditModal = (goal: SavingsGoal) => {
+    setEditingGoal(goal);
+    setName(goal.name);
+    setTargetAmount(String(goal.target_amount));
+    setCurrentAmount(String(goal.current_amount));
+    setTargetDate(goal.target_date ? new Date(goal.target_date) : new Date());
+    setModalVisible(true);
+  };
 
   const handleSaveGoal = async () => {
     if (!name.trim() || !Number(targetAmount)) {
@@ -27,6 +51,7 @@ export default function GoalsScreen() {
 
     try {
       await saveGoal.mutateAsync({
+        id: editingGoal?.id,
         name: name.trim(),
         target_amount: Number(targetAmount),
         current_amount: Number(currentAmount) || 0,
@@ -34,10 +59,8 @@ export default function GoalsScreen() {
         target_date: targetDate.toISOString().split('T')[0],
       });
       setModalVisible(false);
-      setName('');
-      setTargetAmount('');
-      setCurrentAmount('');
-      setAlertConfig({ visible: true, title: '已建立', message: '儲蓄目標已新增。', type: 'success' });
+      resetForm();
+      setAlertConfig({ visible: true, title: editingGoal ? '已更新' : '已建立', message: '儲蓄目標已儲存。', type: 'success' });
     } catch (error) {
       setAlertConfig({
         visible: true,
@@ -46,6 +69,33 @@ export default function GoalsScreen() {
         type: 'error',
       });
     }
+  };
+
+  const handleDeleteGoal = () => {
+    if (!editingGoal) return;
+
+    Alert.alert('確認刪除', `確定要刪除「${editingGoal.name}」目標嗎？`, [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '刪除',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await removeGoal.mutateAsync(editingGoal.id);
+            setModalVisible(false);
+            resetForm();
+            setAlertConfig({ visible: true, title: '已刪除', message: '儲蓄目標已刪除。', type: 'success' });
+          } catch (error) {
+            setAlertConfig({
+              visible: true,
+              title: '刪除失敗',
+              message: error instanceof Error ? error.message : '請稍後再試。',
+              type: 'error',
+            });
+          }
+        },
+      },
+    ]);
   };
 
   if (isLoading || !overview || !data) {
@@ -68,7 +118,7 @@ export default function GoalsScreen() {
             <Text className="text-3xl font-black text-slate-900">目標</Text>
             <Text className="text-sm text-slate-400 mt-2">追蹤儲蓄進度與長期資金目標。</Text>
           </View>
-          <TouchableOpacity onPress={() => setModalVisible(true)} className="bg-indigo-600 px-4 py-3 rounded-2xl">
+          <TouchableOpacity onPress={openAddModal} className="bg-indigo-600 px-4 py-3 rounded-2xl">
             <Text className="text-white font-black">新增</Text>
           </TouchableOpacity>
         </View>
@@ -84,7 +134,7 @@ export default function GoalsScreen() {
           <EmptyState title="尚未建立目標" message="例如緊急預備金、旅行基金、買房頭期款。" />
         ) : (
           overview.goals.map((goal) => (
-            <View key={goal.id} className="bg-white border border-slate-100 rounded-2xl p-4 mb-3">
+            <TouchableOpacity key={goal.id} onPress={() => openEditModal(goal)} className="bg-white border border-slate-100 rounded-2xl p-4 mb-3">
               <View className="flex-row justify-between items-center mb-2">
                 <Text className="font-black text-slate-800">{goal.name}</Text>
                 <Text className="font-black text-indigo-600">{Math.round(goal.progress * 100)}%</Text>
@@ -98,7 +148,7 @@ export default function GoalsScreen() {
                 </Text>
                 <Text className="text-xs text-slate-400">剩餘 {formatMoney(goal.remaining)}</Text>
               </View>
-            </View>
+            </TouchableOpacity>
           ))
         )}
       </ScrollView>
@@ -106,7 +156,7 @@ export default function GoalsScreen() {
       <Modal visible={modalVisible} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <View className="bg-white rounded-t-3xl p-5">
-            <Text className="text-xl font-black text-slate-900 mb-4">新增儲蓄目標</Text>
+            <Text className="text-xl font-black text-slate-900 mb-4">{editingGoal ? '編輯儲蓄目標' : '新增儲蓄目標'}</Text>
             <Text className="text-sm font-bold text-slate-500 mb-2">目標名稱</Text>
             <TextInput value={name} onChangeText={setName} placeholder="例如：緊急預備金" className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-4" />
             <Text className="text-sm font-bold text-slate-500 mb-2">目標金額</Text>
@@ -133,9 +183,20 @@ export default function GoalsScreen() {
                 <Text className="font-black text-slate-600">取消</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={handleSaveGoal} className="flex-1 bg-indigo-600 rounded-2xl p-4 items-center">
-                <Text className="font-black text-white">儲存</Text>
+                <Text className="font-black text-white">{saveGoal.isPending ? '儲存中...' : '儲存'}</Text>
               </TouchableOpacity>
             </View>
+            {editingGoal && (
+              <TouchableOpacity
+                onPress={handleDeleteGoal}
+                disabled={removeGoal.isPending}
+                className="bg-rose-50 border border-rose-100 rounded-2xl p-4 items-center mt-3"
+              >
+                <Text className="font-black text-rose-600">
+                  {removeGoal.isPending ? '刪除中...' : '刪除此目標'}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </Modal>

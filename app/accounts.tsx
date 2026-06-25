@@ -1,7 +1,7 @@
 import { Stack, useRouter } from 'expo-router';
 import { ArrowLeft, CreditCard, Landmark, Plus, Wallet } from 'lucide-react-native';
 import React, { useState } from 'react';
-import { ActivityIndicator, Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AccountBalanceCard } from '@/components/finance/AccountBalanceCard';
 import { EmptyState } from '@/components/finance/EmptyState';
@@ -33,7 +33,7 @@ function iconForType(type: AccountType) {
 
 export default function AccountsScreen() {
   const router = useRouter();
-  const { overview, financeData, saveAccount, isLoading } = useFinanceOverview();
+  const { overview, financeData, saveAccount, removeAccount, isLoading } = useFinanceOverview();
   const data = financeData.data;
   const [modalVisible, setModalVisible] = useState(false);
   const [editingAccount, setEditingAccount] = useState<FinanceAccount | null>(null);
@@ -76,6 +76,32 @@ export default function AccountsScreen() {
         type: 'error',
       });
     }
+  };
+
+  const handleArchive = () => {
+    if (!editingAccount) return;
+
+    Alert.alert('確認刪除', `確定要刪除「${editingAccount.name}」帳戶嗎？歷史流水仍會保留原帳戶資訊。`, [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '刪除',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await removeAccount.mutateAsync(editingAccount.id);
+            setModalVisible(false);
+            setAlertConfig({ visible: true, title: '已刪除', message: '帳戶已從列表移除。', type: 'success' });
+          } catch (error) {
+            setAlertConfig({
+              visible: true,
+              title: '刪除失敗',
+              message: error instanceof Error ? error.message : '請稍後再試。',
+              type: 'error',
+            });
+          }
+        },
+      },
+    ]);
   };
 
   if (isLoading || !overview || !data) {
@@ -139,6 +165,17 @@ export default function AccountsScreen() {
                 <Text className="font-black text-white">儲存</Text>
               </TouchableOpacity>
             </View>
+            {editingAccount && (
+              <TouchableOpacity
+                onPress={handleArchive}
+                disabled={removeAccount.isPending}
+                className="bg-rose-50 border border-rose-100 rounded-2xl p-4 items-center mt-3"
+              >
+                <Text className="font-black text-rose-600">
+                  {removeAccount.isPending ? '刪除中...' : '刪除此帳戶'}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </Modal>

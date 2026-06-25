@@ -119,27 +119,6 @@ export type ExchangeRate = {
   provider: 'frankfurter';
 };
 
-export type NotificationImportStatus = 'pending' | 'confirmed' | 'ignored' | 'duplicate';
-
-export type NotificationImport = {
-  id: string;
-  user_id?: string;
-  source_app: string;
-  source_package: string;
-  notification_title?: string | null;
-  notification_text_preview: string;
-  notification_hash: string;
-  parsed_type?: TransactionType | null;
-  parsed_amount?: number | null;
-  parsed_currency: CurrencyCode;
-  parsed_merchant?: string | null;
-  parsed_account_hint?: string | null;
-  occurred_at: string;
-  status: NotificationImportStatus;
-  confirmed_entry_id?: string | null;
-  created_at?: string;
-};
-
 export type FutureNoteImportStatus = 'pending' | 'confirmed' | 'ignored' | 'duplicate';
 
 export type FutureNoteImport = {

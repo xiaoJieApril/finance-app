@@ -23,7 +23,6 @@ import { TransactionRow } from '@/components/finance/TransactionRow';
 import { CustomAlert, AlertConfig } from '@/components/ui/CustomAlert';
 import { useFinanceOverview } from '@/hooks/useFinanceOverview';
 import { useFutureNoteImports } from '@/hooks/useFutureNoteImports';
-import { useNotificationImports } from '@/hooks/useNotificationImports';
 import { CurrencyCode, TransactionType } from '@/type';
 import { formatMoney } from '@/utils/finance';
 
@@ -50,7 +49,6 @@ const QUICK_TEMPLATES = [
 export default function OverviewScreen() {
   const router = useRouter();
   const { overview, financeData, saveEntry, isLoading } = useFinanceOverview();
-  const { pendingImports } = useNotificationImports();
   const { pendingImports: pendingFutureNoteImports } = useFutureNoteImports();
   const data = financeData.data;
 
@@ -177,21 +175,6 @@ export default function OverviewScreen() {
               套用 v2 Supabase migration 後即可啟用帳戶、轉帳、多幣快取與固定帳單。
             </Text>
           </View>
-        )}
-
-        {Boolean(pendingImports.data?.length) && (
-          <TouchableOpacity
-            onPress={() => router.push('../notification-imports')}
-            className="bg-teal-50 border border-teal-100 rounded-2xl p-4 mb-4 flex-row items-center"
-          >
-            <View className="w-10 h-10 rounded-xl bg-white items-center justify-center mr-3">
-              <Bell size={18} color="#0f766e" />
-            </View>
-            <View className="flex-1">
-              <Text className="font-black text-teal-900">有 {pendingImports.data?.length} 筆通知待確認</Text>
-              <Text className="text-xs text-teal-700 mt-1">檢查銀行或錢包通知，確認後才會正式入帳。</Text>
-            </View>
-          </TouchableOpacity>
         )}
 
         {Boolean(pendingFutureNoteImports.data?.length) && (

@@ -2,7 +2,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { Stack, useRouter } from 'expo-router';
 import { ArrowLeft, Plus } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, Modal, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { EmptyState } from '@/components/finance/EmptyState';
 import { FilterBar } from '@/components/finance/FilterBar';
@@ -31,9 +31,10 @@ const CURRENCY_OPTIONS = [
 
 export default function RecurringScreen() {
   const router = useRouter();
-  const { overview, financeData, saveRecurringItem, isLoading } = useFinanceOverview();
+  const { overview, financeData, saveRecurringItem, removeRecurringItem, isLoading } = useFinanceOverview();
   const data = financeData.data;
   const [modalVisible, setModalVisible] = useState(false);
+  const [editingItem, setEditingItem] = useState<RecurringItem | null>(null);
   const [name, setName] = useState('');
   const [type, setType] = useState<CategoryType>('expense');
   const [amount, setAmount] = useState('');
@@ -47,15 +48,38 @@ export default function RecurringScreen() {
 
   const categories = useMemo(() => data?.categories.filter((category) => category.type === type) ?? [], [data?.categories, type]);
 
-  const openModal = () => {
+  const handleTypeChange = (nextType: CategoryType) => {
+    setType(nextType);
+    const nextCategories = data?.categories.filter((category) => category.type === nextType) ?? [];
+    setCategoryId(nextCategories[0]?.id ?? null);
+  };
+
+  const resetForm = () => {
+    setEditingItem(null);
     setName('');
     setType('expense');
     setAmount('');
     setCurrency('MYR');
     setFrequency('monthly');
     setAccountId(data?.accounts[0]?.id ?? null);
-    setCategoryId(null);
+    setCategoryId(data?.categories.find((category) => category.type === 'expense')?.id ?? null);
     setNextDueDate(new Date());
+  };
+
+  const openModal = (item?: RecurringItem) => {
+    if (item) {
+      setEditingItem(item);
+      setName(item.name);
+      setType(item.type);
+      setAmount(String(item.amount));
+      setCurrency(item.currency);
+      setFrequency(item.frequency);
+      setAccountId(item.account_id ?? data?.accounts[0]?.id ?? null);
+      setCategoryId(item.category_id ?? null);
+      setNextDueDate(new Date(item.next_due_date));
+    } else {
+      resetForm();
+    }
     setModalVisible(true);
   };
 
@@ -67,6 +91,7 @@ export default function RecurringScreen() {
 
     try {
       await saveRecurringItem.mutateAsync({
+        id: editingItem?.id,
         name: name.trim(),
         type,
         amount: Number(amount),
@@ -78,7 +103,8 @@ export default function RecurringScreen() {
         is_active: true,
       });
       setModalVisible(false);
-      setAlertConfig({ visible: true, title: '已建立', message: '固定項目已加入提醒。', type: 'success' });
+      resetForm();
+      setAlertConfig({ visible: true, title: editingItem ? '已更新' : '已建立', message: '固定項目已儲存。', type: 'success' });
     } catch (error) {
       setAlertConfig({
         visible: true,
@@ -87,6 +113,33 @@ export default function RecurringScreen() {
         type: 'error',
       });
     }
+  };
+
+  const handleDelete = () => {
+    if (!editingItem) return;
+
+    Alert.alert('確認刪除', `確定要刪除「${editingItem.name}」固定項目嗎？`, [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '刪除',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await removeRecurringItem.mutateAsync(editingItem.id);
+            setModalVisible(false);
+            resetForm();
+            setAlertConfig({ visible: true, title: '已刪除', message: '固定項目已刪除。', type: 'success' });
+          } catch (error) {
+            setAlertConfig({
+              visible: true,
+              title: '刪除失敗',
+              message: error instanceof Error ? error.message : '請稍後再試。',
+              type: 'error',
+            });
+          }
+        },
+      },
+    ]);
   };
 
   if (isLoading || !overview || !data) {
@@ -106,7 +159,7 @@ export default function RecurringScreen() {
             <ArrowLeft size={20} color="#475569" />
           </TouchableOpacity>
           <Text className="text-xl font-black text-slate-900">固定帳單</Text>
-          <TouchableOpacity onPress={openModal} className="w-10 h-10 bg-indigo-600 rounded-2xl items-center justify-center">
+          <TouchableOpacity onPress={() => openModal()} className="w-10 h-10 bg-indigo-600 rounded-2xl items-center justify-center">
             <Plus size={20} color="white" />
           </TouchableOpacity>
         </View>
@@ -123,7 +176,7 @@ export default function RecurringScreen() {
           <EmptyState title="還沒有固定項目" message="新增房租、訂閱、薪水等固定收支。" />
         ) : (
           data.recurringItems.map((item) => (
-            <View key={item.id} className="bg-white border border-slate-100 rounded-2xl p-4 mb-3">
+            <TouchableOpacity key={item.id} onPress={() => openModal(item)} className="bg-white border border-slate-100 rounded-2xl p-4 mb-3">
               <View className="flex-row justify-between items-center">
                 <View className="flex-1">
                   <Text className="font-black text-slate-800">{item.name}</Text>
@@ -135,7 +188,7 @@ export default function RecurringScreen() {
                   {formatMoney(item.amount)}
                 </Text>
               </View>
-            </View>
+            </TouchableOpacity>
           ))
         )}
       </ScrollView>
@@ -143,8 +196,8 @@ export default function RecurringScreen() {
       <Modal visible={modalVisible} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <ScrollView className="bg-white rounded-t-3xl p-5 max-h-[88%]" contentContainerStyle={{ paddingBottom: 28 }}>
-            <Text className="text-xl font-black text-slate-900 mb-4">新增固定項目</Text>
-            <FilterBar options={[...TYPE_OPTIONS]} value={type} onChange={setType} />
+            <Text className="text-xl font-black text-slate-900 mb-4">{editingItem ? '編輯固定項目' : '新增固定項目'}</Text>
+            <FilterBar options={[...TYPE_OPTIONS]} value={type} onChange={handleTypeChange} />
             <Text className="text-sm font-bold text-slate-500 mb-2">名稱</Text>
             <TextInput value={name} onChangeText={setName} placeholder="例如：房租、薪水、Netflix" className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-4" />
             <Text className="text-sm font-bold text-slate-500 mb-2">金額</Text>
@@ -179,9 +232,20 @@ export default function RecurringScreen() {
                 <Text className="font-black text-slate-600">取消</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={handleSave} className="flex-1 bg-indigo-600 rounded-2xl p-4 items-center">
-                <Text className="font-black text-white">儲存</Text>
+                <Text className="font-black text-white">{saveRecurringItem.isPending ? '儲存中...' : '儲存'}</Text>
               </TouchableOpacity>
             </View>
+            {editingItem && (
+              <TouchableOpacity
+                onPress={handleDelete}
+                disabled={removeRecurringItem.isPending}
+                className="bg-rose-50 border border-rose-100 rounded-2xl p-4 items-center mt-3"
+              >
+                <Text className="font-black text-rose-600">
+                  {removeRecurringItem.isPending ? '刪除中...' : '刪除此固定項目'}
+                </Text>
+              </TouchableOpacity>
+            )}
           </ScrollView>
         </View>
       </Modal>
