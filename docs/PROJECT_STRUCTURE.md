@@ -19,7 +19,7 @@ Route files should stay thin: they can own screen-local form state, but shared b
 
 - `features/finance/`: the main finance domain. It owns finance screens, finance types, Supabase repository logic, overview hooks, transaction/category/account/budget/goal/recurring calculations, icons, and finance-specific UI components.
 - `features/imports/future-note/`: Future Note staging inbox logic. It reads pending imports and marks them confirmed or ignored.
-- `features/assistant/`: AI review chat, finance context builder, response parser, and report renderer.
+- `features/assistant/`: AI review and budget-planning chat, finance context builder, response parser, and report renderers.
 - `features/reports/`: CSV and PDF export helpers.
 - `features/auth/`: Supabase sign-in, sign-up, sign-out, and session hooks.
 - `features/settings/`: profile/settings screen that connects auth actions, account shortcuts, Future Note shortcuts, and local reminder preferences.

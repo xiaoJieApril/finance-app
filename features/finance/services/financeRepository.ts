@@ -17,6 +17,8 @@ import {
   FinanceData,
   RecurringItem,
   SavingsGoal,
+  SpendingRule,
+  SpendingRulePeriod,
   Transaction,
   TransactionEntry,
   TransactionType,
@@ -36,6 +38,7 @@ export const financeQueryKeys = {
   budgets: ['finance-budgets'] as const,
   goals: ['savings-goals'] as const,
   recurring: ['recurring-items'] as const,
+  spendingRules: ['spending-rules'] as const,
 };
 
 const DEFAULT_ACCOUNT: FinanceAccount = {
@@ -123,6 +126,13 @@ function attachRelations(
     account: accounts.find((account) => account.id === entry.account_id) ?? null,
     to_account: accounts.find((account) => account.id === entry.to_account_id) ?? null,
     category: categories.find((category) => category.id === entry.category_id) ?? null,
+  }));
+}
+
+function attachRuleRelations(rules: SpendingRule[], categories: FinanceCategory[]) {
+  return rules.map((rule) => ({
+    ...rule,
+    category: categories.find((category) => category.id === rule.category_id) ?? null,
   }));
 }
 
@@ -325,6 +335,7 @@ export async function getLegacyFinanceData(): Promise<FinanceData> {
     budgets,
     goals: [],
     recurringItems: [],
+    spendingRules: [],
   };
 }
 
@@ -384,6 +395,7 @@ export async function getFinanceData(): Promise<FinanceData> {
       category: categories.find((category) => category.id === item.category_id) ?? null,
       account: allAccounts.find((account) => account.id === item.account_id) ?? null,
     }));
+    const spendingRules = await getSpendingRulesSafely(categories);
 
     return {
       source: 'v2',
@@ -394,6 +406,7 @@ export async function getFinanceData(): Promise<FinanceData> {
       budgets,
       goals: (goalsResult.data ?? []) as SavingsGoal[],
       recurringItems,
+      spendingRules,
     };
   } catch (error) {
     if (isMissingSchemaError(error)) return getLegacyFinanceData();
@@ -467,6 +480,12 @@ export type UpsertAccountInput = {
   currency: CurrencyCode;
   initial_balance: number;
   icon?: string;
+  statement_day?: number | null;
+  payment_due_day?: number | null;
+  minimum_payment?: number | null;
+  outstanding_balance?: number | null;
+  interest_rate?: number | null;
+  credit_limit?: number | null;
 };
 
 export async function upsertAccount(input: UpsertAccountInput) {
@@ -672,5 +691,47 @@ export async function upsertRecurringItem(input: Partial<RecurringItem> & { name
 
 export async function deleteRecurringItem(id: string) {
   const { error } = await supabase.from('recurring_items').delete().eq('id', id);
+  if (error) throw error;
+}
+
+async function getSpendingRulesSafely(categories: FinanceCategory[]): Promise<SpendingRule[]> {
+  try {
+    const { data, error } = await supabase
+      .from('spending_rules')
+      .select('*')
+      .eq('is_active', true)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    return attachRuleRelations((data ?? []) as SpendingRule[], categories);
+  } catch (error) {
+    if (isMissingSchemaError(error)) return [];
+    throw error;
+  }
+}
+
+export type UpsertSpendingRuleInput = {
+  id?: string;
+  name: string;
+  category_id?: string | null;
+  period: SpendingRulePeriod;
+  limit_amount: number;
+  is_active?: boolean;
+};
+
+export async function upsertSpendingRule(input: UpsertSpendingRuleInput) {
+  const user_id = await getCurrentUserId();
+  const payload = { is_active: true, ...input, user_id };
+  const query = supabase.from('spending_rules');
+  const { data, error } = input.id
+    ? await query.update(payload).eq('id', input.id).select().single()
+    : await query.insert([payload]).select().single();
+
+  if (error) throw error;
+  return data as SpendingRule;
+}
+
+export async function deleteSpendingRule(id: string) {
+  const { error } = await supabase.from('spending_rules').delete().eq('id', id);
   if (error) throw error;
 }

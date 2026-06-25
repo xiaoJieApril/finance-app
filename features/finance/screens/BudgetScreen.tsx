@@ -7,20 +7,36 @@ import { FilterBar } from '@/features/finance/components/FilterBar';
 import { SectionHeader } from '@/features/finance/components/SectionHeader';
 import { AlertConfig, CustomAlert } from '@/shared/ui/CustomAlert';
 import { useFinanceOverview } from '@/features/finance/hooks/useFinanceOverview';
-import { FinanceBudget, FinanceCategory } from '@/features/finance/types';
-import { formatMoney } from '@/features/finance/utils/finance';
+import { FinanceBudget, FinanceCategory, SpendingRule, SpendingRulePeriod } from '@/features/finance/types';
+import { evaluateSpendingRules, formatMoney } from '@/features/finance/utils/finance';
 
 export default function BudgetScreen() {
-  const { overview, financeData, saveCategory, saveBudget, removeBudget, isLoading } = useFinanceOverview();
+  const {
+    overview,
+    financeData,
+    saveCategory,
+    saveBudget,
+    removeBudget,
+    saveSpendingRule,
+    removeSpendingRule,
+    isLoading,
+  } = useFinanceOverview();
   const data = financeData.data;
 
   const [modalVisible, setModalVisible] = useState(false);
   const [editingBudget, setEditingBudget] = useState<FinanceBudget | null>(null);
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [budgetLimit, setBudgetLimit] = useState('');
+  const [ruleModalVisible, setRuleModalVisible] = useState(false);
+  const [editingRule, setEditingRule] = useState<SpendingRule | null>(null);
+  const [ruleName, setRuleName] = useState('');
+  const [ruleCategoryId, setRuleCategoryId] = useState<string | null>(null);
+  const [rulePeriod, setRulePeriod] = useState<SpendingRulePeriod>('month');
+  const [ruleLimit, setRuleLimit] = useState('');
   const [alertConfig, setAlertConfig] = useState<AlertConfig>({ visible: false, title: '', message: '', type: 'info' });
 
   const expenseCategories = data?.categories.filter((category) => category.type === 'expense') ?? [];
+  const ruleStatuses = data ? evaluateSpendingRules(data.spendingRules, data.entries) : [];
 
   const resetForm = (nextCategoryId = expenseCategories[0]?.id ?? null) => {
     setEditingBudget(null);
@@ -121,6 +137,83 @@ export default function BudgetScreen() {
     ]);
   };
 
+  const resetRuleForm = () => {
+    setEditingRule(null);
+    setRuleName('');
+    setRuleCategoryId(expenseCategories[0]?.id ?? null);
+    setRulePeriod('month');
+    setRuleLimit('');
+  };
+
+  const openAddRule = () => {
+    resetRuleForm();
+    setRuleModalVisible(true);
+  };
+
+  const openEditRule = (rule: SpendingRule) => {
+    setEditingRule(rule);
+    setRuleName(rule.name);
+    setRuleCategoryId(rule.category_id ?? expenseCategories[0]?.id ?? null);
+    setRulePeriod(rule.period);
+    setRuleLimit(String(rule.limit_amount));
+    setRuleModalVisible(true);
+  };
+
+  const handleSaveRule = async () => {
+    const limit = Number(ruleLimit);
+    if (!ruleName.trim() || Number.isNaN(limit) || limit <= 0) {
+      setAlertConfig({ visible: true, title: '規則資料不足', message: '請輸入規則名稱與有效上限。', type: 'warning' });
+      return;
+    }
+
+    try {
+      await saveSpendingRule.mutateAsync({
+        id: editingRule?.id,
+        name: ruleName.trim(),
+        category_id: ruleCategoryId,
+        period: rulePeriod,
+        limit_amount: limit,
+      });
+      setRuleModalVisible(false);
+      resetRuleForm();
+      setAlertConfig({ visible: true, title: editingRule ? '已更新' : '已建立', message: '支出規則已儲存。', type: 'success' });
+    } catch (error) {
+      setAlertConfig({
+        visible: true,
+        title: '儲存失敗',
+        message: data?.source === 'legacy' ? '請先套用 feature expansion migration 後再新增支出規則。' : error instanceof Error ? error.message : '請稍後再試。',
+        type: 'error',
+      });
+    }
+  };
+
+  const handleDeleteRule = () => {
+    if (!editingRule) return;
+
+    Alert.alert('確認刪除', `確定要刪除「${editingRule.name}」規則嗎？`, [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '刪除',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await removeSpendingRule.mutateAsync(editingRule.id);
+            setRuleModalVisible(false);
+            resetRuleForm();
+            setAlertConfig({ visible: true, title: '已刪除', message: '支出規則已刪除。', type: 'success' });
+          } catch (error) {
+            setAlertConfig({
+              visible: true,
+              title: '刪除失敗',
+              message: error instanceof Error ? error.message : '請稍後再試。',
+              type: 'error',
+            });
+          }
+        },
+      },
+    ]);
+  };
+
   if (isLoading || !overview || !data) {
     return (
       <View className="flex-1 justify-center items-center bg-slate-50">
@@ -203,6 +296,36 @@ export default function BudgetScreen() {
               </TouchableOpacity>
             ))
         )}
+
+        <SectionHeader title="支出規則" actionLabel="新增規則" onAction={openAddRule} />
+        {ruleStatuses.length === 0 ? (
+          <EmptyState title="尚未設定支出規則" message="例如餐飲每天 RM30、娛樂每週 RM100。" />
+        ) : (
+          ruleStatuses.map((rule) => (
+            <TouchableOpacity key={rule.id} onPress={() => openEditRule(rule)} className="bg-white border border-slate-100 rounded-2xl p-4 mb-3">
+              <View className="flex-row justify-between items-start">
+                <View className="flex-1">
+                  <Text className="font-black text-slate-800">{rule.name}</Text>
+                  <Text className="text-xs text-slate-400 mt-1">
+                    {rule.category?.name ?? '全部支出'} · {rule.period === 'day' ? '每日' : rule.period === 'week' ? '每週' : '每月'}
+                  </Text>
+                </View>
+                <Text className={`font-black ${rule.status === 'danger' ? 'text-rose-600' : rule.status === 'tight' ? 'text-amber-600' : 'text-emerald-600'}`}>
+                  {Math.round(rule.usage * 100)}%
+                </Text>
+              </View>
+              <View className="h-2 bg-slate-100 rounded-full overflow-hidden mt-3 mb-2">
+                <View
+                  className={`h-full rounded-full ${rule.status === 'danger' ? 'bg-rose-500' : rule.status === 'tight' ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                  style={{ width: `${Math.min(rule.usage * 100, 100)}%` }}
+                />
+              </View>
+              <Text className="text-xs text-slate-400">
+                已用 {formatMoney(rule.spent)} / 上限 {formatMoney(rule.limit_amount)}
+              </Text>
+            </TouchableOpacity>
+          ))
+        )}
       </ScrollView>
 
       <Modal visible={modalVisible} animationType="slide" transparent>
@@ -243,6 +366,68 @@ export default function BudgetScreen() {
               >
                 <Text className="font-black text-rose-600">
                   {removeBudget.isPending ? '刪除中...' : '刪除此預算'}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={ruleModalVisible} animationType="slide" transparent>
+        <View className="flex-1 justify-end bg-black/40">
+          <View className="bg-white rounded-t-3xl p-5">
+            <Text className="text-xl font-black text-slate-900 mb-4">{editingRule ? '編輯支出規則' : '新增支出規則'}</Text>
+            <Text className="text-sm font-bold text-slate-500 mb-2">規則名稱</Text>
+            <TextInput
+              value={ruleName}
+              onChangeText={setRuleName}
+              placeholder="例如：餐飲每日上限"
+              className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-4"
+            />
+            <Text className="text-sm font-bold text-slate-500 mb-2">類別</Text>
+            {expenseCategories.length === 0 ? (
+              <EmptyState title="沒有支出類別" message="請先建立支出類別。" />
+            ) : (
+              <FilterBar
+                options={expenseCategories.map((category) => ({ label: category.name, value: category.id }))}
+                value={ruleCategoryId ?? expenseCategories[0]?.id}
+                onChange={setRuleCategoryId}
+              />
+            )}
+            <Text className="text-sm font-bold text-slate-500 mb-2">週期</Text>
+            <FilterBar
+              options={[
+                { label: '每日', value: 'day' },
+                { label: '每週', value: 'week' },
+                { label: '每月', value: 'month' },
+              ]}
+              value={rulePeriod}
+              onChange={setRulePeriod}
+            />
+            <Text className="text-sm font-bold text-slate-500 mb-2">支出上限</Text>
+            <TextInput
+              value={ruleLimit}
+              onChangeText={setRuleLimit}
+              keyboardType="numeric"
+              placeholder="0.00"
+              className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-5"
+            />
+            <View className="flex-row gap-3">
+              <TouchableOpacity onPress={() => setRuleModalVisible(false)} className="flex-1 bg-slate-100 rounded-2xl p-4 items-center">
+                <Text className="font-black text-slate-600">取消</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleSaveRule} className="flex-1 bg-indigo-600 rounded-2xl p-4 items-center">
+                <Text className="font-black text-white">{saveSpendingRule.isPending ? '儲存中...' : '儲存'}</Text>
+              </TouchableOpacity>
+            </View>
+            {editingRule && (
+              <TouchableOpacity
+                onPress={handleDeleteRule}
+                disabled={removeSpendingRule.isPending}
+                className="bg-rose-50 border border-rose-100 rounded-2xl p-4 items-center mt-3"
+              >
+                <Text className="font-black text-rose-600">
+                  {removeSpendingRule.isPending ? '刪除中...' : '刪除此規則'}
                 </Text>
               </TouchableOpacity>
             )}

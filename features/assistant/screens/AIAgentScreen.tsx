@@ -1,5 +1,5 @@
 import { Stack, useRouter } from 'expo-router';
-import { ArrowLeft, Bot, Calendar, Send, Sparkles, Trash2 } from 'lucide-react-native';
+import { ArrowLeft, Bot, Calendar, PiggyBank, Send, Sparkles, Trash2 } from 'lucide-react-native';
 import React, { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -12,21 +12,24 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BudgetPlanningReportView } from '@/features/assistant/components/BudgetPlanningReportView';
 import { ReviewReportView } from '@/features/assistant/components/ReviewReportView';
 import { ChatMessage, parseAgentResponse, sendChatMessage } from '@/features/assistant/services/aiAgent';
 import {
+  AssistantMode,
   buildFinanceContext,
+  getPlannerPrompt,
   getRecapPrompt,
+  PLANNER_PROMPTS,
   RECAP_PROMPTS,
   ReviewPeriod,
 } from '@/features/assistant/utils/financeContext';
-import { useBudget } from '@/features/finance/hooks/useBudget';
-import { useTransactions } from '@/features/finance/hooks/useTransactions';
+import { useFinanceOverview } from '@/features/finance/hooks/useFinanceOverview';
 
 /**
- * AI review route.
+ * AI review and monthly budget-planning route.
  *
- * Builds a weekly/monthly finance context and renders assistant replies.
+ * Builds finance context from v2 data and renders structured assistant replies.
  */
 function generateId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -37,23 +40,29 @@ export default function AIAgentScreen() {
   const insets = useSafeAreaInsets();
   const flatListRef = useRef<FlatList>(null);
 
-  const { fetchTransactions, fetchCategories } = useTransactions();
-  const { totalBudget } = useBudget();
-  const { data: transactions = [] } = fetchTransactions;
-  const { data: categories = [] } = fetchCategories;
+  const { overview, financeData, isLoading: isFinanceLoading } = useFinanceOverview();
+  const data = financeData.data;
 
+  const [mode, setMode] = useState<AssistantMode>('review');
   const [period, setPeriod] = useState<ReviewPeriod>('month');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const financeContext = buildFinanceContext(transactions, categories, totalBudget, period);
+  const financeContext =
+    data && overview
+      ? buildFinanceContext({ data, overview, mode, period: mode === 'planner' ? 'month' : period })
+      : null;
 
   const handleSend = useCallback(
     async (text?: string) => {
       const userText = (text ?? input).trim();
       if (!userText || isLoading) return;
+      if (!financeContext) {
+        setError('財務資料尚未載入完成，請稍後再試。');
+        return;
+      }
 
       setInput('');
       setError(null);
@@ -67,6 +76,7 @@ export default function AIAgentScreen() {
           userMessage: userText,
           financeContext,
           history: messages,
+          mode,
           period,
         });
 
@@ -79,10 +89,11 @@ export default function AIAgentScreen() {
         setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
       }
     },
-    [input, isLoading, financeContext, messages, period],
+    [input, isLoading, financeContext, messages, mode, period],
   );
 
   const handleQuickRecap = () => handleSend(getRecapPrompt(period));
+  const handleQuickPlanner = () => handleSend(getPlannerPrompt());
 
   const handleClear = () => {
     setMessages([]);
@@ -92,6 +103,7 @@ export default function AIAgentScreen() {
   const renderMessage = ({ item }: { item: ChatMessage }) => {
     const isUser = item.role === 'user';
     const report = !isUser ? parseAgentResponse(item.content) : null;
+    const isPlanningReport = report?.reportType === 'budget_planning';
 
     return (
       <View className={`mb-4 ${isUser ? 'items-end' : 'items-start'}`}>
@@ -110,6 +122,8 @@ export default function AIAgentScreen() {
           >
             {isUser ? (
               <Text className="text-[15px] leading-6 text-white">{item.content}</Text>
+            ) : isPlanningReport ? (
+              <BudgetPlanningReportView report={report} />
             ) : report ? (
               <ReviewReportView report={report} />
             ) : (
@@ -122,7 +136,8 @@ export default function AIAgentScreen() {
   };
 
   const showSuggestions = messages.length === 0 && !isLoading;
-  const prompts = RECAP_PROMPTS[period];
+  const prompts = mode === 'planner' ? PLANNER_PROMPTS : RECAP_PROMPTS[period];
+  const isPlanner = mode === 'planner';
 
   return (
     <View className="flex-1 bg-slate-50" style={{ paddingTop: insets.top }}>
@@ -138,7 +153,7 @@ export default function AIAgentScreen() {
         </TouchableOpacity>
         <View className="items-center">
           <Text className="text-lg font-bold text-slate-800">金庫小助手</Text>
-          <Text className="text-xs text-slate-400">AI 財務復盤</Text>
+          <Text className="text-xs text-slate-400">{isPlanner ? 'AI 預算規劃師' : 'AI 財務復盤'}</Text>
         </View>
         <TouchableOpacity
           onPress={handleClear}
@@ -149,8 +164,26 @@ export default function AIAgentScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Period toggle */}
+      {/* Mode toggle */}
       <View className="flex-row mx-4 mt-3 bg-white rounded-xl p-1 border border-slate-100">
+        {([
+          ['review', '財務復盤'],
+          ['planner', '預算規劃'],
+        ] as [AssistantMode, string][]).map(([value, label]) => (
+          <TouchableOpacity
+            key={value}
+            onPress={() => setMode(value)}
+            className={`flex-1 py-2.5 rounded-lg items-center ${mode === value ? 'bg-indigo-600' : ''}`}
+          >
+            <Text className={`font-bold text-sm ${mode === value ? 'text-white' : 'text-slate-500'}`}>
+              {label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {!isPlanner && (
+        <View className="flex-row mx-4 mt-2 bg-white rounded-xl p-1 border border-slate-100">
         {(['week', 'month'] as ReviewPeriod[]).map((p) => (
           <TouchableOpacity
             key={p}
@@ -162,7 +195,8 @@ export default function AIAgentScreen() {
             </Text>
           </TouchableOpacity>
         ))}
-      </View>
+        </View>
+      )}
 
       <KeyboardAvoidingView
         className="flex-1"
@@ -172,21 +206,24 @@ export default function AIAgentScreen() {
           <>
             <View className="mx-4 mt-4 bg-indigo-600 rounded-2xl p-5">
               <View className="flex-row items-center gap-2 mb-2">
-                <Sparkles size={18} color="#c7d2fe" />
+                {isPlanner ? <PiggyBank size={18} color="#c7d2fe" /> : <Sparkles size={18} color="#c7d2fe" />}
                 <Text className="text-indigo-100 font-bold text-sm">
-                  {period === 'week' ? '本週財務復盤' : '本月財務復盤'}
+                  {isPlanner ? '月度預算規劃' : period === 'week' ? '本週財務復盤' : '本月財務復盤'}
                 </Text>
               </View>
               <Text className="text-indigo-200 text-sm leading-5 mb-4">
-                我已讀取你{period === 'week' ? '近 7 天' : '本月'}的收支數據，點擊下方按鈕即可生成完整復盤報告。
+                {isPlanner
+                  ? '我會根據你的收支、現有預算、帳戶、儲蓄目標與固定帳單，提出下個月預算方案。建議只供參考，不會自動修改資料。'
+                  : `我已讀取你${period === 'week' ? '近 7 天' : '本月'}的收支數據，點擊下方按鈕即可生成完整復盤報告。`}
               </Text>
               <TouchableOpacity
-                onPress={handleQuickRecap}
+                onPress={isPlanner ? handleQuickPlanner : handleQuickRecap}
+                disabled={isFinanceLoading || !financeContext}
                 className="bg-white py-3 rounded-xl flex-row items-center justify-center gap-2"
               >
-                <Calendar size={18} color="#4f46e5" />
+                {isPlanner ? <PiggyBank size={18} color="#4f46e5" /> : <Calendar size={18} color="#4f46e5" />}
                 <Text className="text-indigo-600 font-bold">
-                  {period === 'week' ? '生成本週復盤報告' : '生成本月復盤報告'}
+                  {isPlanner ? '生成月度預算方案' : period === 'week' ? '生成本週復盤報告' : '生成本月復盤報告'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -238,18 +275,18 @@ export default function AIAgentScreen() {
         >
           <TextInput
             className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-slate-800 text-[15px] max-h-28"
-            placeholder="追問復盤細節..."
+            placeholder={isPlanner ? '追問預算規劃...' : '追問復盤細節...'}
             placeholderTextColor="#94a3b8"
             value={input}
             onChangeText={setInput}
             multiline
-            editable={!isLoading}
+            editable={!isLoading && Boolean(financeContext)}
             onSubmitEditing={() => handleSend()}
             returnKeyType="send"
           />
           <TouchableOpacity
             onPress={() => handleSend()}
-            disabled={!input.trim() || isLoading}
+            disabled={!input.trim() || isLoading || !financeContext}
             className={`w-12 h-12 rounded-full items-center justify-center mb-0.5 ${
               input.trim() && !isLoading ? 'bg-indigo-600' : 'bg-slate-200'
             }`}

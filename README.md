@@ -1,18 +1,19 @@
 # finaTracker
 
-finaTracker is a React Native finance app built with Expo Router. It focuses on daily cashflow visibility: manual accounts, transaction tracking, budgets, categories, savings goals, recurring bills, Future Note imports, AI review, reports, and local reminders.
+finaTracker is a React Native finance app built with Expo Router. It focuses on daily cashflow visibility: manual accounts, transaction tracking, budgets, categories, savings goals, recurring bills, Future Note imports, AI review/planning, reports, and local reminders.
 
 ## Core Features
 
-- Cashflow overview: monthly income, expense, balance, net worth, budget risk, and upcoming recurring items.
+- Cashflow overview: monthly income, expense, balance, net worth, budget risk, safe-to-spend estimate, timeline, and upcoming recurring items.
 - Ledger: create, edit, delete, search, and filter transaction records.
-- Budgets and categories: manage spending categories, income categories, and monthly limits.
-- Accounts: track cash, banks, e-wallets, and credit cards while preserving historical transaction context.
-- Goals: track savings targets and progress.
+- Budgets and categories: manage spending categories, income categories, monthly limits, and user-defined spending rules.
+- Accounts: track cash, banks, e-wallets, and credit cards while preserving historical transaction context. Credit cards can store statement day, due day, minimum payment, outstanding balance, interest rate, and credit limit.
+- Goals: track savings targets, progress, monthly contribution plans, and projected completion pace.
 - Recurring bills: manage fixed income and expenses with local reminder support.
 - Future Note imports: review external planned expenses before they become ledger entries.
-- AI review: summarize weekly or monthly finance context and produce structured review reports.
+- AI review and planning: summarize weekly/monthly finance context and propose read-only monthly budget plans with conservative, balanced, and aggressive-saving scenarios.
 - Reports: export transaction summaries to CSV or PDF.
+- Scenario simulator: test a possible future income or expense against current cashflow before committing.
 
 ## Project Structure
 

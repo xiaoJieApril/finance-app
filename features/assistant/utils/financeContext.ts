@@ -1,65 +1,121 @@
 /**
- * Converts ledger data into compact weekly or monthly context for AI review.
+ * Converts finance data into compact context for AI review and planning.
  *
- * The assistant feature depends on this normalized input instead of reading
- * raw app state directly.
+ * The assistant receives normalized summaries instead of reading raw app state
+ * directly. This keeps prompt inputs stable while the finance feature evolves.
  */
-import { Category, Transaction } from '@/features/finance/types';
+import { FinanceData, TransactionEntry } from '@/features/finance/types';
+import { entryBaseAmount } from '@/features/finance/utils/finance';
 
 export type ReviewPeriod = 'week' | 'month';
+export type AssistantMode = 'review' | 'planner';
 
-export type FinanceInput = {
+type BudgetContextRow = {
+  categoryId: string;
+  category: string;
+  currentBudget: number;
+  spent: number;
+  remaining: number;
+  usagePercent: number;
+};
+
+type FinanceContextInput = {
+  mode: AssistantMode;
   reviewType: 'weekly' | 'monthly';
   period: { startDate: string; endDate: string };
-  income: number;
-  expense: number;
-  budget: number;
+  cashflow: {
+    income: number;
+    expense: number;
+    netCashFlow: number;
+    savingsRatePercent: number | null;
+  };
+  budgets: {
+    totalBudget: number;
+    totalSpent: number;
+    usagePercent: number;
+    categoryBudgets: BudgetContextRow[];
+  };
+  accounts: {
+    totalNetWorth: number;
+    rows: {
+      name: string;
+      type: string;
+      currency: string;
+      balance: number;
+      outstandingBalance?: number | null;
+      minimumPayment?: number | null;
+      paymentDueDay?: number | null;
+      interestRate?: number | null;
+    }[];
+  };
+  goals: {
+    name: string;
+    targetAmount: number;
+    currentAmount: number;
+    monthlyContribution?: number | null;
+    progressPercent: number;
+  }[];
+  spendingRules: {
+    name: string;
+    category: string;
+    period: string;
+    limitAmount: number;
+  }[];
+  recurring: {
+    forecastedIncome: number;
+    forecastedExpense: number;
+    projectedBalance: number;
+    items: { name: string; type: string; amount: number; frequency: string; nextDueDate: string }[];
+  };
   transactions: {
     date: string;
     category: string;
     amount: number;
     description: string;
-    type: 'income' | 'expense';
+    type: 'income' | 'expense' | 'transfer';
   }[];
+  planningSafety: {
+    readOnly: true;
+    note: string;
+  };
 };
 
-type FinanceSummary = {
+type OverviewSnapshot = {
+  cashFlow: { income: number; expense: number; balance: number };
+  accounts: {
+    name: string;
+    type: string;
+    currency: string;
+    current_balance?: number | null;
+    outstanding_balance?: number | null;
+    minimum_payment?: number | null;
+    payment_due_day?: number | null;
+    interest_rate?: number | null;
+  }[];
+  budgets: {
+    category_id: string;
+    monthly_limit: number;
+    spent: number;
+    remaining: number;
+    usage: number;
+    category?: { name: string } | null;
+  }[];
+  goals: {
+    name: string;
+    target_amount: number;
+    current_amount: number;
+    monthly_contribution?: number | null;
+    progress: number;
+  }[];
   totalBudget: number;
-  totalSpending: number;
-  remainingBudget: number;
-  totalIncome: number;
-  savingsTotal: number;
-  categoryBreakdown: { name: string; amount: number; limit?: number }[];
-  periodTransactions: FinanceInput['transactions'];
-  periodLabel: string;
-  startDate: string;
-  endDate: string;
+  totalBudgetSpent: number;
+  budgetUsage: number;
+  totalNetWorth: number;
+  forecast: { recurringIncome: number; recurringExpense: number; projectedBalance: number };
 };
 
 function toISODate(date: Date): string {
   return date.toISOString().split('T')[0];
-}
-
-function filterByPeriod(transactions: Transaction[], period: ReviewPeriod): Transaction[] {
-  const now = new Date();
-  now.setHours(23, 59, 59, 999);
-
-  if (period === 'week') {
-    const weekAgo = new Date(now);
-    weekAgo.setDate(weekAgo.getDate() - 6);
-    weekAgo.setHours(0, 0, 0, 0);
-    return transactions.filter((tx) => {
-      const d = new Date(tx.date);
-      return d >= weekAgo && d <= now;
-    });
-  }
-
-  const month = now.getMonth();
-  const year = now.getFullYear();
-  return transactions.filter((tx) => {
-    const d = new Date(tx.date);
-    return d.getMonth() === month && d.getFullYear() === year;
-  });
 }
 
 function getPeriodDates(period: ReviewPeriod): { startDate: string; endDate: string } {
@@ -77,97 +133,111 @@ function getPeriodDates(period: ReviewPeriod): { startDate: string; endDate: str
   return { startDate: toISODate(start), endDate: toISODate(now) };
 }
 
-function buildSummary(
-  transactions: Transaction[],
-  categories: Category[],
-  totalBudget: number,
-  period: ReviewPeriod,
-): FinanceSummary {
-  const now = new Date();
-  const periodTxs = filterByPeriod(transactions, period);
+function filterEntriesByPeriod(entries: TransactionEntry[], period: ReviewPeriod) {
   const { startDate, endDate } = getPeriodDates(period);
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  end.setHours(23, 59, 59, 999);
 
-  const periodLabel =
-    period === 'week'
-      ? `近 7 天（${new Date(now.getTime() - 6 * 86400000).toLocaleDateString('zh-TW')} ~ ${now.toLocaleDateString('zh-TW')}）`
-      : `${now.getFullYear()} 年 ${now.getMonth() + 1} 月`;
+  return entries.filter((entry) => {
+    const date = new Date(entry.date);
+    return date >= start && date <= end;
+  });
+}
 
-  const totalSpending = periodTxs
-    .filter((tx) => tx.category?.type === 'expense')
-    .reduce((sum, tx) => sum + tx.amount, 0);
-
-  const totalIncome = periodTxs
-    .filter((tx) => tx.category?.type === 'income')
-    .reduce((sum, tx) => sum + tx.amount, 0);
-
-  const savingsTotal = periodTxs
-    .filter((tx) => tx.is_savings)
-    .reduce((sum, tx) => sum + tx.amount, 0);
-
-  const categoryMap = new Map<string, number>();
-  periodTxs
-    .filter((tx) => tx.category?.type === 'expense')
-    .forEach((tx) => {
-      const name = tx.category?.name ?? '未分類';
-      categoryMap.set(name, (categoryMap.get(name) ?? 0) + tx.amount);
-    });
-
-  const categoryBreakdown = Array.from(categoryMap.entries())
-    .map(([name, amount]) => {
-      const cat = categories.find((c) => c.name === name && c.type === 'expense');
-      return { name, amount, limit: cat?.budget_limit };
-    })
-    .sort((a, b) => b.amount - a.amount);
-
-  const periodTransactions: FinanceInput['transactions'] = periodTxs.map((tx) => ({
-    date: toISODate(new Date(tx.date)),
-    category: tx.category?.name ?? '未分類',
-    amount: tx.amount,
-    description: tx.note || '（無備註）',
-    type: (tx.category?.type === 'income' ? 'income' : 'expense') as 'income' | 'expense',
+function toTransactionContext(entries: TransactionEntry[], period: ReviewPeriod) {
+  return filterEntriesByPeriod(entries, period).map((entry) => ({
+    date: toISODate(new Date(entry.date)),
+    category:
+      entry.type === 'transfer'
+        ? `${entry.account?.name ?? '帳戶'} -> ${entry.to_account?.name ?? '帳戶'}`
+        : entry.category?.name ?? '未分類',
+    amount: entryBaseAmount(entry) || entry.amount,
+    description: entry.note || '（無備註）',
+    type: entry.type,
   }));
-
-  const remainingBudget = period === 'month' ? totalBudget - totalSpending : totalBudget;
-
-  return {
-    totalBudget,
-    totalSpending,
-    remainingBudget,
-    totalIncome,
-    savingsTotal,
-    categoryBreakdown,
-    periodTransactions,
-    periodLabel,
-    startDate,
-    endDate,
-  };
 }
 
-export function buildFinanceInput(
-  transactions: Transaction[],
-  categories: Category[],
-  totalBudget: number,
-  period: ReviewPeriod = 'month',
-): FinanceInput {
-  const s = buildSummary(transactions, categories, totalBudget, period);
+export function buildFinanceContext(params: {
+  data: FinanceData;
+  overview: OverviewSnapshot;
+  mode: AssistantMode;
+  period?: ReviewPeriod;
+}): string {
+  const { data, overview, mode, period = 'month' } = params;
+  const { startDate, endDate } = getPeriodDates(period);
+  const savingsRatePercent =
+    overview.cashFlow.income > 0 ? (overview.cashFlow.balance / overview.cashFlow.income) * 100 : null;
 
-  return {
+  const input: FinanceContextInput = {
+    mode,
     reviewType: period === 'week' ? 'weekly' : 'monthly',
-    period: { startDate: s.startDate, endDate: s.endDate },
-    income: s.totalIncome,
-    expense: s.totalSpending,
-    budget: s.totalBudget,
-    transactions: s.periodTransactions,
+    period: { startDate, endDate },
+    cashflow: {
+      income: overview.cashFlow.income,
+      expense: overview.cashFlow.expense,
+      netCashFlow: overview.cashFlow.balance,
+      savingsRatePercent,
+    },
+    budgets: {
+      totalBudget: overview.totalBudget,
+      totalSpent: overview.totalBudgetSpent,
+      usagePercent: overview.budgetUsage * 100,
+      categoryBudgets: overview.budgets.map((budget) => ({
+        categoryId: budget.category_id,
+        category: budget.category?.name ?? '未分類',
+        currentBudget: budget.monthly_limit,
+        spent: budget.spent,
+        remaining: budget.remaining,
+        usagePercent: budget.usage * 100,
+      })),
+    },
+    accounts: {
+      totalNetWorth: overview.totalNetWorth,
+      rows: overview.accounts.map((account) => ({
+        name: account.name,
+        type: account.type,
+        currency: account.currency,
+        balance: account.current_balance ?? 0,
+        outstandingBalance: account.outstanding_balance,
+        minimumPayment: account.minimum_payment,
+        paymentDueDay: account.payment_due_day,
+        interestRate: account.interest_rate,
+      })),
+    },
+    goals: overview.goals.map((goal) => ({
+      name: goal.name,
+      targetAmount: goal.target_amount,
+      currentAmount: goal.current_amount,
+      monthlyContribution: goal.monthly_contribution,
+      progressPercent: goal.progress * 100,
+    })),
+    spendingRules: data.spendingRules.map((rule) => ({
+      name: rule.name,
+      category: rule.category?.name ?? '全部支出',
+      period: rule.period,
+      limitAmount: rule.limit_amount,
+    })),
+    recurring: {
+      forecastedIncome: overview.forecast.recurringIncome,
+      forecastedExpense: overview.forecast.recurringExpense,
+      projectedBalance: overview.forecast.projectedBalance,
+      items: data.recurringItems.map((item) => ({
+        name: item.name,
+        type: item.type,
+        amount: item.amount,
+        frequency: item.frequency,
+        nextDueDate: item.next_due_date,
+      })),
+    },
+    transactions: toTransactionContext(data.entries, period),
+    planningSafety: {
+      readOnly: true,
+      note: 'AI may propose budget changes, but the app must not apply them automatically.',
+    },
   };
-}
 
-export function buildFinanceContext(
-  transactions: Transaction[],
-  categories: Category[],
-  totalBudget: number,
-  period: ReviewPeriod = 'month',
-): string {
-  return JSON.stringify(buildFinanceInput(transactions, categories, totalBudget, period), null, 2);
+  return JSON.stringify(input, null, 2);
 }
 
 export const RECAP_PROMPTS: Record<ReviewPeriod, string[]> = {
@@ -185,8 +255,19 @@ export const RECAP_PROMPTS: Record<ReviewPeriod, string[]> = {
   ],
 };
 
+export const PLANNER_PROMPTS = [
+  '幫我規劃下個月預算',
+  '根據我的支出習慣，預算應該怎麼分配？',
+  '哪些類別應該減少預算？',
+  '我要提高儲蓄率，預算怎麼調整？',
+];
+
 export function getRecapPrompt(period: ReviewPeriod): string {
   return period === 'week'
     ? '請根據以上 JSON 數據，產出完整的本週財務復盤報告。'
     : '請根據以上 JSON 數據，產出完整的本月財務復盤報告。';
+}
+
+export function getPlannerPrompt(): string {
+  return '請根據以上 JSON 數據，產出下個月的月度預算規劃方案。只提出建議，不要自動修改任何資料。';
 }

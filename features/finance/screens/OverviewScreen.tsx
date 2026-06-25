@@ -1,6 +1,6 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
-import { Bell, Coffee, NotebookTabs, Plus, ShieldCheck, Utensils, User, X } from 'lucide-react-native';
+import { Bell, CalendarDays, Coffee, NotebookTabs, Plus, ShieldCheck, SlidersHorizontal, Utensils, User, X } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -24,7 +24,12 @@ import { CustomAlert, AlertConfig } from '@/shared/ui/CustomAlert';
 import { useFinanceOverview } from '@/features/finance/hooks/useFinanceOverview';
 import { useFutureNoteImports } from '@/features/imports/future-note/hooks/useFutureNoteImports';
 import { CurrencyCode, TransactionType } from '@/features/finance/types';
-import { formatMoney } from '@/features/finance/utils/finance';
+import {
+  buildCashflowTimeline,
+  calculateSafeToSpend,
+  formatMoney,
+  simulateCashflowScenario,
+} from '@/features/finance/utils/finance';
 
 /**
  * Main cashflow dashboard route.
@@ -69,6 +74,8 @@ export default function OverviewScreen() {
   const [date, setDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [isSavings, setIsSavings] = useState(false);
+  const [scenarioAmount, setScenarioAmount] = useState('');
+  const [scenarioType, setScenarioType] = useState<'expense' | 'income'>('expense');
   const [alertConfig, setAlertConfig] = useState<AlertConfig>({
     visible: false,
     title: '',
@@ -82,6 +89,25 @@ export default function OverviewScreen() {
   );
 
   const latestEntries = useMemo(() => data?.entries.slice(0, 4) ?? [], [data?.entries]);
+  const safeToSpend = useMemo(
+    () => (overview ? calculateSafeToSpend(overview.totalNetWorth, data?.recurringItems ?? []) : null),
+    [data?.recurringItems, overview],
+  );
+  const timeline = useMemo(
+    () =>
+      overview
+        ? buildCashflowTimeline(
+            overview.totalNetWorth,
+            data?.recurringItems ?? [],
+            pendingFutureNoteImports.data ?? [],
+          )
+        : [],
+    [data?.recurringItems, overview, pendingFutureNoteImports.data],
+  );
+  const scenario = useMemo(
+    () => simulateCashflowScenario(overview?.totalNetWorth ?? 0, Number(scenarioAmount) || 0, scenarioType),
+    [overview?.totalNetWorth, scenarioAmount, scenarioType],
+  );
 
   const openNewEntry = () => {
     const firstAccount = data?.accounts[0]?.id ?? null;
@@ -222,6 +248,93 @@ export default function OverviewScreen() {
           </View>
           <Text className="text-xs text-slate-400">
             {formatMoney(overview.totalBudgetSpent)} / {formatMoney(overview.totalBudget)}
+          </Text>
+        </View>
+
+        {safeToSpend && (
+          <View className="bg-white border border-slate-100 rounded-2xl p-4 mb-6">
+            <View className="flex-row items-center justify-between mb-2">
+              <Text className="font-bold text-slate-800">未來 {safeToSpend.days} 天安全可花</Text>
+              <Text className="text-xs font-bold text-emerald-600">含安全緩衝</Text>
+            </View>
+            <Text className="text-3xl font-black text-emerald-600 mb-2">
+              {formatMoney(safeToSpend.safeAmount)}
+            </Text>
+            <Text className="text-xs text-slate-400">
+              約每天 {formatMoney(safeToSpend.dailySafeAmount)}；已預留帳單 {formatMoney(safeToSpend.upcomingExpense)}
+              與緩衝 {formatMoney(safeToSpend.safetyBuffer)}。
+            </Text>
+          </View>
+        )}
+
+        <View className="bg-white border border-slate-100 rounded-2xl p-4 mb-6">
+          <View className="flex-row items-center mb-3">
+            <View className="w-10 h-10 rounded-xl bg-indigo-50 items-center justify-center mr-3">
+              <CalendarDays size={20} color="#4f46e5" />
+            </View>
+            <View className="flex-1">
+              <Text className="font-bold text-slate-800">現金流時間線</Text>
+              <Text className="text-xs text-slate-400">固定收支與 Future Note 計劃支出</Text>
+            </View>
+          </View>
+          {timeline.length === 0 ? (
+            <Text className="text-sm text-slate-400">未來 30 天沒有已知固定收支。</Text>
+          ) : (
+            timeline.slice(0, 5).map((item) => (
+              <View key={item.id} className="flex-row items-center py-2 border-t border-slate-50">
+                <View className={`w-2.5 h-2.5 rounded-full mr-3 ${
+                  item.status === 'danger' ? 'bg-rose-500' : item.status === 'tight' ? 'bg-amber-500' : 'bg-emerald-500'
+                }`} />
+                <View className="flex-1">
+                  <Text className="text-sm font-bold text-slate-700">{item.label}</Text>
+                  <Text className="text-xs text-slate-400">{new Date(item.date).toLocaleDateString('zh-TW')}</Text>
+                </View>
+                <View className="items-end">
+                  <Text className={item.amount >= 0 ? 'text-emerald-600 font-black' : 'text-rose-600 font-black'}>
+                    {item.amount >= 0 ? '+' : '-'}{formatMoney(Math.abs(item.amount))}
+                  </Text>
+                  <Text className="text-[11px] text-slate-400">餘額 {formatMoney(item.balanceAfter)}</Text>
+                </View>
+              </View>
+            ))
+          )}
+        </View>
+
+        <View className="bg-white border border-slate-100 rounded-2xl p-4 mb-6">
+          <View className="flex-row items-center mb-3">
+            <View className="w-10 h-10 rounded-xl bg-violet-50 items-center justify-center mr-3">
+              <SlidersHorizontal size={20} color="#7c3aed" />
+            </View>
+            <View className="flex-1">
+              <Text className="font-bold text-slate-800">情境模擬</Text>
+              <Text className="text-xs text-slate-400">快速試算一筆未來收支是否安全</Text>
+            </View>
+          </View>
+          <FilterBar
+            options={[
+              { label: '支出', value: 'expense' },
+              { label: '收入', value: 'income' },
+            ]}
+            value={scenarioType}
+            onChange={setScenarioType}
+          />
+          <TextInput
+            value={scenarioAmount}
+            onChangeText={setScenarioAmount}
+            keyboardType="numeric"
+            placeholder="輸入金額，例如 200"
+            className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-3"
+          />
+          <Text
+            className={`font-black ${
+              scenario.status === 'danger'
+                ? 'text-rose-600'
+                : scenario.status === 'tight'
+                  ? 'text-amber-600'
+                  : 'text-emerald-600'
+            }`}
+          >
+            模擬後餘額 {formatMoney(scenario.projectedBalance)}
           </Text>
         </View>
 

@@ -8,8 +8,10 @@ import {
   FinanceAccount,
   FinanceBudget,
   FinanceCategory,
+  FutureNoteImport,
   RecurringItem,
   SavingsGoal,
+  SpendingRule,
   TransactionEntry,
 } from '@/features/finance/types';
 import { isSameMonth } from './date';
@@ -175,11 +177,143 @@ export function calculateFinancialHealth(params: {
 }
 
 export function calculateGoalProgress(goals: SavingsGoal[]) {
-  return goals.map((goal) => ({
-    ...goal,
-    progress: goal.target_amount > 0 ? Math.min(goal.current_amount / goal.target_amount, 1) : 0,
-    remaining: Math.max(goal.target_amount - goal.current_amount, 0),
+  return goals.map((goal) => {
+    const remaining = Math.max(goal.target_amount - goal.current_amount, 0);
+    const monthlyContribution = goal.monthly_contribution ?? 0;
+
+    return {
+      ...goal,
+      progress: goal.target_amount > 0 ? Math.min(goal.current_amount / goal.target_amount, 1) : 0,
+      remaining,
+      projectedMonths: monthlyContribution > 0 ? Math.ceil(remaining / monthlyContribution) : null,
+    };
+  });
+}
+
+export type CashflowTimelineItem = {
+  id: string;
+  label: string;
+  date: string;
+  amount: number;
+  type: 'income' | 'expense' | 'future_note';
+  balanceAfter: number;
+  status: 'safe' | 'tight' | 'danger';
+};
+
+function timelineStatus(balance: number) {
+  if (balance < 0) return 'danger';
+  if (balance < 300) return 'tight';
+  return 'safe';
+}
+
+export function buildCashflowTimeline(
+  startingBalance: number,
+  recurringItems: RecurringItem[],
+  pendingFutureNotes: FutureNoteImport[] = [],
+  days = 30,
+): CashflowTimelineItem[] {
+  const now = new Date();
+  const end = new Date();
+  end.setDate(now.getDate() + days);
+  now.setHours(0, 0, 0, 0);
+  end.setHours(23, 59, 59, 999);
+
+  const recurring = recurringItems
+    .filter((item) => item.is_active)
+    .map((item) => ({
+      id: `recurring-${item.id}`,
+      label: item.name,
+      date: item.next_due_date,
+      amount: item.type === 'income' ? item.amount : -item.amount,
+      type: item.type,
+    }));
+
+  const futureNotes = pendingFutureNotes.map((note) => ({
+    id: `future-note-${note.id}`,
+    label: note.title,
+    date: note.due_date,
+    amount: -note.amount,
+    type: 'future_note' as const,
   }));
+
+  let runningBalance = startingBalance;
+
+  return [...recurring, ...futureNotes]
+    .filter((item) => {
+      const due = new Date(item.date);
+      return due >= now && due <= end;
+    })
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .map((item) => {
+      runningBalance += item.amount;
+      return {
+        ...item,
+        balanceAfter: runningBalance,
+        status: timelineStatus(runningBalance),
+      };
+    });
+}
+
+export function calculateSafeToSpend(startingBalance: number, recurringItems: RecurringItem[], days = 14) {
+  const upcoming = getUpcomingRecurringItems(recurringItems, days);
+  const upcomingIncome = upcoming
+    .filter((item) => item.type === 'income')
+    .reduce((sum, item) => sum + item.amount, 0);
+  const upcomingExpense = upcoming
+    .filter((item) => item.type === 'expense')
+    .reduce((sum, item) => sum + item.amount, 0);
+  const safetyBuffer = Math.max(upcomingExpense * 0.2, 300);
+  const safeAmount = Math.max(startingBalance + upcomingIncome - upcomingExpense - safetyBuffer, 0);
+
+  return {
+    safeAmount,
+    dailySafeAmount: safeAmount / Math.max(days, 1),
+    upcomingIncome,
+    upcomingExpense,
+    safetyBuffer,
+    days,
+  };
+}
+
+function startOfRulePeriod(period: SpendingRule['period'], date = new Date()) {
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  if (period === 'month') return new Date(start.getFullYear(), start.getMonth(), 1);
+  if (period === 'week') {
+    const day = start.getDay();
+    start.setDate(start.getDate() - day);
+  }
+  return start;
+}
+
+export function evaluateSpendingRules(rules: SpendingRule[], entries: TransactionEntry[], date = new Date()) {
+  return rules.map((rule) => {
+    const start = startOfRulePeriod(rule.period, date);
+    const spent = entries
+      .filter((entry) => entry.type === 'expense')
+      .filter((entry) => !rule.category_id || entry.category_id === rule.category_id)
+      .filter((entry) => new Date(entry.date) >= start && new Date(entry.date) <= date)
+      .reduce((sum, entry) => sum + entryBaseAmount(entry), 0);
+    const usage = rule.limit_amount > 0 ? spent / rule.limit_amount : 0;
+
+    return {
+      ...rule,
+      spent,
+      remaining: rule.limit_amount - spent,
+      usage,
+      status: usage >= 1 ? 'danger' : usage >= 0.8 ? 'tight' : 'safe',
+    };
+  });
+}
+
+export function simulateCashflowScenario(currentBalance: number, amount: number, type: 'income' | 'expense') {
+  const signedAmount = type === 'income' ? amount : -amount;
+  const projectedBalance = currentBalance + signedAmount;
+
+  return {
+    projectedBalance,
+    status: timelineStatus(projectedBalance),
+  };
 }
 
 export function formatMoney(amount: number | null | undefined, currency = 'RM') {

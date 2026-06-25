@@ -17,6 +17,7 @@ export default function GoalsScreen() {
   const [name, setName] = useState('');
   const [targetAmount, setTargetAmount] = useState('');
   const [currentAmount, setCurrentAmount] = useState('');
+  const [monthlyContribution, setMonthlyContribution] = useState('');
   const [targetDate, setTargetDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [alertConfig, setAlertConfig] = useState<AlertConfig>({ visible: false, title: '', message: '', type: 'info' });
@@ -26,6 +27,7 @@ export default function GoalsScreen() {
     setName('');
     setTargetAmount('');
     setCurrentAmount('');
+    setMonthlyContribution('');
     setTargetDate(new Date());
   };
 
@@ -39,6 +41,7 @@ export default function GoalsScreen() {
     setName(goal.name);
     setTargetAmount(String(goal.target_amount));
     setCurrentAmount(String(goal.current_amount));
+    setMonthlyContribution(String(goal.monthly_contribution ?? ''));
     setTargetDate(goal.target_date ? new Date(goal.target_date) : new Date());
     setModalVisible(true);
   };
@@ -55,6 +58,7 @@ export default function GoalsScreen() {
         name: name.trim(),
         target_amount: Number(targetAmount),
         current_amount: Number(currentAmount) || 0,
+        monthly_contribution: Number(monthlyContribution) || 0,
         currency: 'MYR',
         target_date: targetDate.toISOString().split('T')[0],
       });
@@ -148,6 +152,10 @@ export default function GoalsScreen() {
                 </Text>
                 <Text className="text-xs text-slate-400">剩餘 {formatMoney(goal.remaining)}</Text>
               </View>
+              <Text className="text-xs text-indigo-500 mt-2">
+                每月投入 {formatMoney(goal.monthly_contribution ?? 0)}
+                {goal.projectedMonths ? ` · 約 ${goal.projectedMonths} 個月完成` : ' · 尚未設定完成速度'}
+              </Text>
             </TouchableOpacity>
           ))
         )}
@@ -163,6 +171,8 @@ export default function GoalsScreen() {
             <TextInput value={targetAmount} onChangeText={setTargetAmount} keyboardType="numeric" placeholder="0.00" className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-4" />
             <Text className="text-sm font-bold text-slate-500 mb-2">目前已存</Text>
             <TextInput value={currentAmount} onChangeText={setCurrentAmount} keyboardType="numeric" placeholder="0.00" className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-4" />
+            <Text className="text-sm font-bold text-slate-500 mb-2">每月預計投入</Text>
+            <TextInput value={monthlyContribution} onChangeText={setMonthlyContribution} keyboardType="numeric" placeholder="0.00" className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-4" />
             <Text className="text-sm font-bold text-slate-500 mb-2">目標日期</Text>
             <TouchableOpacity onPress={() => setShowDatePicker(true)} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-4">
               <Text className="font-bold text-slate-700">{targetDate.toLocaleDateString('zh-TW')}</Text>

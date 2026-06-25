@@ -11,6 +11,7 @@ import {
   deleteFinanceCategory,
   deleteRecurringItem,
   deleteSavingsGoal,
+  deleteSpendingRule,
   deleteTransactionEntry,
   financeQueryKeys,
   getFinanceData,
@@ -19,6 +20,7 @@ import {
   upsertFinanceCategory,
   upsertRecurringItem,
   upsertSavingsGoal,
+  upsertSpendingRule,
   upsertTransactionEntry,
 } from '@/features/finance/services/financeRepository';
 import { FinanceCategory, TransactionEntry } from '@/features/finance/types';
@@ -34,6 +36,7 @@ export function useFinanceData() {
     queryClient.invalidateQueries({ queryKey: financeQueryKeys.financeData });
     queryClient.invalidateQueries({ queryKey: financeQueryKeys.transactions });
     queryClient.invalidateQueries({ queryKey: financeQueryKeys.categories });
+    queryClient.invalidateQueries({ queryKey: financeQueryKeys.spendingRules });
   };
 
   const saveEntry = useMutation({
@@ -96,6 +99,16 @@ export function useFinanceData() {
     onSuccess: invalidate,
   });
 
+  const saveSpendingRule = useMutation({
+    mutationFn: upsertSpendingRule,
+    onSuccess: invalidate,
+  });
+
+  const removeSpendingRule = useMutation({
+    mutationFn: deleteSpendingRule,
+    onSuccess: invalidate,
+  });
+
   return {
     financeData,
     saveEntry,
@@ -110,5 +123,7 @@ export function useFinanceData() {
     removeGoal,
     saveRecurringItem,
     removeRecurringItem,
+    saveSpendingRule,
+    removeSpendingRule,
   };
 }

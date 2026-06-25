@@ -41,6 +41,12 @@ export default function AccountsScreen() {
   const [type, setType] = useState<AccountType>('cash');
   const [currency, setCurrency] = useState<CurrencyCode>('MYR');
   const [initialBalance, setInitialBalance] = useState('');
+  const [statementDay, setStatementDay] = useState('');
+  const [paymentDueDay, setPaymentDueDay] = useState('');
+  const [minimumPayment, setMinimumPayment] = useState('');
+  const [outstandingBalance, setOutstandingBalance] = useState('');
+  const [interestRate, setInterestRate] = useState('');
+  const [creditLimit, setCreditLimit] = useState('');
   const [alertConfig, setAlertConfig] = useState<AlertConfig>({ visible: false, title: '', message: '', type: 'info' });
 
   const openModal = (account?: FinanceAccount) => {
@@ -49,6 +55,12 @@ export default function AccountsScreen() {
     setType(account?.type ?? 'cash');
     setCurrency(account?.currency ?? 'MYR');
     setInitialBalance(String(account?.initial_balance ?? ''));
+    setStatementDay(account?.statement_day ? String(account.statement_day) : '');
+    setPaymentDueDay(account?.payment_due_day ? String(account.payment_due_day) : '');
+    setMinimumPayment(account?.minimum_payment ? String(account.minimum_payment) : '');
+    setOutstandingBalance(account?.outstanding_balance ? String(account.outstanding_balance) : '');
+    setInterestRate(account?.interest_rate ? String(account.interest_rate) : '');
+    setCreditLimit(account?.credit_limit ? String(account.credit_limit) : '');
     setModalVisible(true);
   };
 
@@ -65,6 +77,12 @@ export default function AccountsScreen() {
         type,
         currency,
         initial_balance: Number(initialBalance) || 0,
+        statement_day: type === 'credit_card' ? Number(statementDay) || null : null,
+        payment_due_day: type === 'credit_card' ? Number(paymentDueDay) || null : null,
+        minimum_payment: type === 'credit_card' ? Number(minimumPayment) || 0 : null,
+        outstanding_balance: type === 'credit_card' ? Number(outstandingBalance) || 0 : null,
+        interest_rate: type === 'credit_card' ? Number(interestRate) || 0 : null,
+        credit_limit: type === 'credit_card' ? Number(creditLimit) || 0 : null,
       });
       setModalVisible(false);
       setAlertConfig({ visible: true, title: '已儲存', message: '帳戶資料已更新。', type: 'success' });
@@ -112,6 +130,9 @@ export default function AccountsScreen() {
     );
   }
 
+  const creditCards = overview.accounts.filter((account) => account.type === 'credit_card');
+  const totalCreditDebt = creditCards.reduce((sum, account) => sum + (account.outstanding_balance ?? 0), 0);
+
   return (
     <SafeAreaView className="flex-1 bg-slate-50">
       <Stack.Screen options={{ headerShown: false }} />
@@ -131,6 +152,16 @@ export default function AccountsScreen() {
           <Text className="text-3xl font-black text-slate-900">{formatMoney(overview.totalNetWorth)}</Text>
           <Text className="text-xs text-slate-400 mt-2">依目前帳戶初始餘額與流水推算。</Text>
         </View>
+
+        {creditCards.length > 0 && (
+          <View className="bg-rose-50 rounded-2xl border border-rose-100 p-5 mb-5">
+            <Text className="text-xs font-bold text-rose-400 mb-1">信用卡未償餘額</Text>
+            <Text className="text-3xl font-black text-rose-600">{formatMoney(totalCreditDebt)}</Text>
+            <Text className="text-xs text-rose-500 mt-2">
+              用於後續 AI 還款優先順序與到期提醒，不會自動產生交易。
+            </Text>
+          </View>
+        )}
 
         {overview.accounts.length === 0 ? (
           <EmptyState title="尚未建立帳戶" message="新增現金、銀行或電子錢包來追蹤資金位置。" />
@@ -157,6 +188,34 @@ export default function AccountsScreen() {
             <FilterBar options={[...CURRENCIES]} value={currency} onChange={setCurrency} />
             <Text className="text-sm font-bold text-slate-500 mb-2">初始餘額</Text>
             <TextInput value={initialBalance} onChangeText={setInitialBalance} keyboardType="numeric" placeholder="0.00" className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-5" />
+            {type === 'credit_card' && (
+              <>
+                <View className="flex-row gap-3">
+                  <View className="flex-1">
+                    <Text className="text-sm font-bold text-slate-500 mb-2">結單日</Text>
+                    <TextInput value={statementDay} onChangeText={setStatementDay} keyboardType="numeric" placeholder="1-31" className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-4" />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-sm font-bold text-slate-500 mb-2">到期日</Text>
+                    <TextInput value={paymentDueDay} onChangeText={setPaymentDueDay} keyboardType="numeric" placeholder="1-31" className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-4" />
+                  </View>
+                </View>
+                <Text className="text-sm font-bold text-slate-500 mb-2">未償餘額</Text>
+                <TextInput value={outstandingBalance} onChangeText={setOutstandingBalance} keyboardType="numeric" placeholder="0.00" className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-4" />
+                <Text className="text-sm font-bold text-slate-500 mb-2">最低還款</Text>
+                <TextInput value={minimumPayment} onChangeText={setMinimumPayment} keyboardType="numeric" placeholder="0.00" className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-4" />
+                <View className="flex-row gap-3">
+                  <View className="flex-1">
+                    <Text className="text-sm font-bold text-slate-500 mb-2">年利率 %</Text>
+                    <TextInput value={interestRate} onChangeText={setInterestRate} keyboardType="numeric" placeholder="18" className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-4" />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-sm font-bold text-slate-500 mb-2">信用額度</Text>
+                    <TextInput value={creditLimit} onChangeText={setCreditLimit} keyboardType="numeric" placeholder="0.00" className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-4" />
+                  </View>
+                </View>
+              </>
+            )}
             <View className="flex-row gap-3">
               <TouchableOpacity onPress={() => setModalVisible(false)} className="flex-1 bg-slate-100 rounded-2xl p-4 items-center">
                 <Text className="font-black text-slate-600">取消</Text>

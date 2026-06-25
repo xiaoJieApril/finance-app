@@ -9,6 +9,7 @@ export type TransactionType = 'income' | 'expense' | 'transfer';
 export type CategoryType = 'income' | 'expense';
 export type AccountType = 'cash' | 'bank' | 'ewallet' | 'credit_card';
 export type CurrencyCode = string;
+export type SpendingRulePeriod = 'day' | 'week' | 'month';
 
 export type Transaction = {
   id: number;
@@ -46,6 +47,12 @@ export type FinanceAccount = {
   current_balance?: number;
   icon?: string;
   is_archived?: boolean;
+  statement_day?: number | null;
+  payment_due_day?: number | null;
+  minimum_payment?: number | null;
+  outstanding_balance?: number | null;
+  interest_rate?: number | null;
+  credit_limit?: number | null;
   created_at?: string;
 };
 
@@ -98,6 +105,7 @@ export type SavingsGoal = {
   current_amount: number;
   currency: CurrencyCode;
   target_date?: string | null;
+  monthly_contribution?: number | null;
   icon?: string;
 };
 
@@ -115,6 +123,18 @@ export type RecurringItem = {
   is_active: boolean;
   category?: FinanceCategory | null;
   account?: FinanceAccount | null;
+};
+
+export type SpendingRule = {
+  id: string;
+  user_id?: string;
+  name: string;
+  category_id?: string | null;
+  period: SpendingRulePeriod;
+  limit_amount: number;
+  is_active: boolean;
+  created_at?: string;
+  category?: FinanceCategory | null;
 };
 
 export type ExchangeRate = {
@@ -156,4 +176,5 @@ export type FinanceData = {
   budgets: FinanceBudget[];
   goals: SavingsGoal[];
   recurringItems: RecurringItem[];
+  spendingRules: SpendingRule[];
 };
