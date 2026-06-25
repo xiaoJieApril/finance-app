@@ -1,50 +1,60 @@
-# Welcome to your Expo app 👋
+# finaTracker
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+finaTracker is a React Native finance app built with Expo Router. It focuses on daily cashflow visibility: manual accounts, transaction tracking, budgets, categories, savings goals, recurring bills, Future Note imports, AI review, reports, and local reminders.
 
-## Get started
+## Core Features
 
-1. Install dependencies
+- Cashflow overview: monthly income, expense, balance, net worth, budget risk, and upcoming recurring items.
+- Ledger: create, edit, delete, search, and filter transaction records.
+- Budgets and categories: manage spending categories, income categories, and monthly limits.
+- Accounts: track cash, banks, e-wallets, and credit cards while preserving historical transaction context.
+- Goals: track savings targets and progress.
+- Recurring bills: manage fixed income and expenses with local reminder support.
+- Future Note imports: review external planned expenses before they become ledger entries.
+- AI review: summarize weekly or monthly finance context and produce structured review reports.
+- Reports: export transaction summaries to CSV or PDF.
 
-   ```bash
-   npm install
-   ```
+## Project Structure
 
-2. Start the app
+- `app/`: Expo Router route files. Keep routes here so URLs and tab navigation stay stable.
+- `features/`: domain-owned app features such as finance, imports, assistant, reports, and auth.
+- `shared/`: reusable UI, hooks, theme helpers, and app-level stores.
+- `infrastructure/`: external clients and platform integrations, currently Supabase.
+- `supabase/`: database migrations and Edge Functions.
+- `scripts/`: one-off local maintenance and asset generation tools.
+- `docs/`: English architecture and feature notes for future maintenance.
 
-   ```bash
-   npx expo start
-   ```
+See [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) and [docs/FEATURES.md](docs/FEATURES.md) for a deeper folder-by-folder guide.
 
-In the output, you'll find options to open the app in a
+## Development
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+Install dependencies:
 
 ```bash
-npm run reset-project
+npm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Start Expo:
 
-## Learn more
+```bash
+npx expo start
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+Validate code before shipping changes:
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```bash
+npx tsc --noEmit
+npm run lint
+```
 
-## Join the community
+## Environment
 
-Join our community of developers creating universal apps.
+Copy `.env.example` and provide the Supabase and AI keys used by the app:
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```bash
+EXPO_PUBLIC_SUPABASE_URL=...
+EXPO_PUBLIC_SUPABASE_ANON_KEY=...
+EXPO_PUBLIC_GEMINI_API_KEY=...
+```
+
+Local reminders use `expo-notifications`. Android notification-reading imports were intentionally removed and should not be reintroduced unless the product direction changes.

@@ -1,13 +1,19 @@
 import '../global.css';
 
+/**
+ * Root Expo Router layout.
+ *
+ * Owns global providers, auth redirects, and local notification presentation
+ * behavior while keeping feature logic outside the route layer.
+ */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as Notifications from 'expo-notifications';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import React, { useEffect } from 'react';
 import { LogBox, Text, View } from 'react-native';
-import { useAuthSession } from '@/hooks/useAuthSession';
-import { useNotificationPermissions } from '@/hooks/useNotificationPermissions';
-import { isSupabaseConfigured } from '@/services/supabase';
+import { useAuthSession } from '@/features/auth/hooks/useAuthSession';
+import { useNotificationPermissions } from '@/shared/hooks/useNotificationPermissions';
+import { isSupabaseConfigured } from '@/infrastructure/supabase/client';
 
 LogBox.ignoreLogs([
   '"shadow*" style props are deprecated. Use "boxShadow".',
