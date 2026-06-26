@@ -1,6 +1,6 @@
 # finaTracker
 
-finaTracker is a React Native finance app built with Expo Router. It focuses on daily cashflow visibility: manual accounts, transaction tracking, budgets, categories, savings goals, recurring bills, Future Note imports, AI review/planning, reports, and local reminders.
+finaTracker is a React Native finance app built with Expo Router. It focuses on daily cashflow visibility: manual accounts, transaction tracking, budgets, categories, savings goals, recurring bills, AI review/planning, reports, and local reminders.
 
 ## Core Features
 
@@ -10,7 +10,6 @@ finaTracker is a React Native finance app built with Expo Router. It focuses on 
 - Accounts: track cash, banks, e-wallets, and credit cards while preserving historical transaction context. Credit cards can store statement day, due day, minimum payment, outstanding balance, interest rate, and credit limit.
 - Goals: track savings targets, progress, monthly contribution plans, and projected completion pace.
 - Recurring bills: manage fixed income and expenses with local reminder support.
-- Future Note imports: review external planned expenses before they become ledger entries.
 - AI review and planning: summarize weekly/monthly finance context and propose read-only monthly budget plans with conservative, balanced, and aggressive-saving scenarios.
 - Reports: export transaction summaries to CSV or PDF.
 - Scenario simulator: test a possible future income or expense against current cashflow before committing.

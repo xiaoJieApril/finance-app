@@ -4,7 +4,7 @@
 
 Location: `features/finance/screens/OverviewScreen.tsx`, `features/finance/hooks/useFinanceOverview.ts`, `features/finance/utils/finance.ts`
 
-Shows monthly income, expenses, balance, net worth, budget usage, health score, safe-to-spend estimate, cashflow timeline, scenario simulator, upcoming recurring items, quick transaction actions, and Future Note pending items.
+Shows monthly income, expenses, balance, net worth, budget usage, health score, safe-to-spend estimate, cashflow timeline, scenario simulator, upcoming recurring items, and quick transaction actions.
 
 ## Ledger
 
@@ -40,12 +40,6 @@ Location: `features/finance/screens/RecurringScreen.tsx`, `features/finance/serv
 
 Tracks fixed income and fixed expenses. Upcoming items are used in cashflow forecasting and local reminder scheduling.
 
-## Future Note Imports
-
-Location: `features/imports/future-note/screens/FutureNoteImportsScreen.tsx`, `features/imports/future-note/`
-
-External planned expenses arrive as pending imports. The user confirms or ignores them; confirmed imports create real ledger entries.
-
 ## AI Review And Budget Planner
 
 Location: `features/assistant/screens/AIAgentScreen.tsx`, `features/assistant/`
@@ -62,7 +56,7 @@ Planner output is advisory only. It never writes to Supabase or applies budget c
 
 Location: `features/finance/screens/OverviewScreen.tsx`, `features/finance/utils/finance.ts`
 
-The overview turns recurring items and pending Future Note spending into a forward-looking timeline. It also estimates how much can be safely spent before upcoming bills, keeping a fixed buffer for tight periods. The simulator lets the user test a hypothetical income or expense and see the projected balance immediately.
+The overview turns recurring items into a forward-looking timeline. It also estimates how much can be safely spent before upcoming bills, keeping a fixed buffer for tight periods. The simulator lets the user test a hypothetical income or expense and see the projected balance immediately.
 
 ## Reports
 

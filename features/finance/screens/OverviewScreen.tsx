@@ -1,6 +1,6 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
-import { Bell, CalendarDays, Coffee, NotebookTabs, Plus, ShieldCheck, SlidersHorizontal, Utensils, User, X } from 'lucide-react-native';
+import { Bell, CalendarDays, Coffee, Plus, ShieldCheck, SlidersHorizontal, Utensils, User, X } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -22,7 +22,6 @@ import { SummaryMetric } from '@/features/finance/components/SummaryMetric';
 import { TransactionRow } from '@/features/finance/components/TransactionRow';
 import { CustomAlert, AlertConfig } from '@/shared/ui/CustomAlert';
 import { useFinanceOverview } from '@/features/finance/hooks/useFinanceOverview';
-import { useFutureNoteImports } from '@/features/imports/future-note/hooks/useFutureNoteImports';
 import { CurrencyCode, TransactionType } from '@/features/finance/types';
 import {
   buildCashflowTimeline,
@@ -60,7 +59,6 @@ const QUICK_TEMPLATES = [
 export default function OverviewScreen() {
   const router = useRouter();
   const { overview, financeData, saveEntry, isLoading } = useFinanceOverview();
-  const { pendingImports: pendingFutureNoteImports } = useFutureNoteImports();
   const data = financeData.data;
 
   const [modalVisible, setModalVisible] = useState(false);
@@ -96,13 +94,9 @@ export default function OverviewScreen() {
   const timeline = useMemo(
     () =>
       overview
-        ? buildCashflowTimeline(
-            overview.totalNetWorth,
-            data?.recurringItems ?? [],
-            pendingFutureNoteImports.data ?? [],
-          )
+        ? buildCashflowTimeline(overview.totalNetWorth, data?.recurringItems ?? [])
         : [],
-    [data?.recurringItems, overview, pendingFutureNoteImports.data],
+    [data?.recurringItems, overview],
   );
   const scenario = useMemo(
     () => simulateCashflowScenario(overview?.totalNetWorth ?? 0, Number(scenarioAmount) || 0, scenarioType),
@@ -209,23 +203,6 @@ export default function OverviewScreen() {
           </View>
         )}
 
-        {Boolean(pendingFutureNoteImports.data?.length) && (
-          <TouchableOpacity
-            onPress={() => router.push('../future-note-imports')}
-            className="bg-violet-50 border border-violet-100 rounded-2xl p-4 mb-4 flex-row items-center"
-          >
-            <View className="w-10 h-10 rounded-xl bg-white items-center justify-center mr-3">
-              <NotebookTabs size={18} color="#7c3aed" />
-            </View>
-            <View className="flex-1">
-              <Text className="font-black text-violet-900">
-                有 {pendingFutureNoteImports.data?.length} 筆 Future Note 待匯入
-              </Text>
-              <Text className="text-xs text-violet-700 mt-1">確認後會成為未來日期的支出流水。</Text>
-            </View>
-          </TouchableOpacity>
-        )}
-
         <View className="flex-row gap-3 mb-3">
           <SummaryMetric label="收入" value={formatMoney(overview.cashFlow.income)} tone="income" />
           <SummaryMetric label="支出" value={formatMoney(overview.cashFlow.expense)} tone="expense" />
@@ -274,7 +251,7 @@ export default function OverviewScreen() {
             </View>
             <View className="flex-1">
               <Text className="font-bold text-slate-800">現金流時間線</Text>
-              <Text className="text-xs text-slate-400">固定收支與 Future Note 計劃支出</Text>
+              <Text className="text-xs text-slate-400">固定收入與固定支出的未來變化</Text>
             </View>
           </View>
           {timeline.length === 0 ? (

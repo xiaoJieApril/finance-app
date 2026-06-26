@@ -146,25 +146,6 @@ export type ExchangeRate = {
   provider: 'frankfurter';
 };
 
-export type FutureNoteImportStatus = 'pending' | 'confirmed' | 'ignored' | 'duplicate';
-
-export type FutureNoteImport = {
-  id: string;
-  user_id?: string;
-  external_id: string;
-  title: string;
-  note?: string | null;
-  amount: number;
-  currency: CurrencyCode;
-  due_date: string;
-  category_hint?: string | null;
-  account_hint?: string | null;
-  source_payload?: Record<string, unknown> | null;
-  status: FutureNoteImportStatus;
-  confirmed_entry_id?: string | null;
-  created_at?: string;
-};
-
 export type FinanceDataSource = 'v2' | 'legacy';
 
 export type FinanceData = {

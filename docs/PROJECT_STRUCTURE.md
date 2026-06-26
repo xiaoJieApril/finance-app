@@ -7,7 +7,6 @@ This project uses Expo Router, so files inside `app/` define navigation routes. 
 - `app/(tabs)/`: main tab screens for overview, history, budget, goals, insights, hidden profile/category/savings routes, and tab layout.
 - `app/accounts.tsx`: account management route.
 - `app/recurring.tsx`: recurring income and bill management route.
-- `app/future-note-imports.tsx`: Future Note review inbox route.
 - `app/ai-agent.tsx`: AI finance review chat route.
 - `app/analytics.tsx`: legacy analytics/export route.
 - `app/login.tsx`: Supabase authentication route.
@@ -18,11 +17,10 @@ Route files should stay thin: they can own screen-local form state, but shared b
 ## Feature Layer
 
 - `features/finance/`: the main finance domain. It owns finance screens, finance types, Supabase repository logic, overview hooks, transaction/category/account/budget/goal/recurring calculations, icons, and finance-specific UI components.
-- `features/imports/future-note/`: Future Note staging inbox logic. It reads pending imports and marks them confirmed or ignored.
 - `features/assistant/`: AI review and budget-planning chat, finance context builder, response parser, and report renderers.
 - `features/reports/`: CSV and PDF export helpers.
 - `features/auth/`: Supabase sign-in, sign-up, sign-out, and session hooks.
-- `features/settings/`: profile/settings screen that connects auth actions, account shortcuts, Future Note shortcuts, and local reminder preferences.
+- `features/settings/`: profile/settings screen that connects auth actions, account shortcuts, recurring-bill shortcuts, and local reminder preferences.
 
 ## Shared Layer
 
@@ -36,7 +34,7 @@ Route files should stay thin: they can own screen-local form state, but shared b
 
 - `infrastructure/supabase/client.ts`: the configured Supabase client and auth storage adapter.
 - `supabase/migrations/`: database schema migrations.
-- `supabase/functions/`: Edge Functions such as the Future Note webhook.
+- `supabase/functions/`: Edge Functions for backend workflows when needed.
 - `scripts/`: local project scripts for assets, imports, and maintenance.
 
 ## Import Rules

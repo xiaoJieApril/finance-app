@@ -71,7 +71,6 @@ function AppShell() {
       <Stack.Screen name="ai-agent" options={{ headerShown: false }} />
       <Stack.Screen name="accounts" options={{ headerShown: false }} />
       <Stack.Screen name="recurring" options={{ headerShown: false }} />
-      <Stack.Screen name="future-note-imports" options={{ headerShown: false }} />
     </Stack>
   );
 }

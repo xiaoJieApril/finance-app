@@ -8,7 +8,6 @@ import {
   FinanceAccount,
   FinanceBudget,
   FinanceCategory,
-  FutureNoteImport,
   RecurringItem,
   SavingsGoal,
   SpendingRule,
@@ -195,7 +194,7 @@ export type CashflowTimelineItem = {
   label: string;
   date: string;
   amount: number;
-  type: 'income' | 'expense' | 'future_note';
+  type: 'income' | 'expense';
   balanceAfter: number;
   status: 'safe' | 'tight' | 'danger';
 };
@@ -209,7 +208,6 @@ function timelineStatus(balance: number) {
 export function buildCashflowTimeline(
   startingBalance: number,
   recurringItems: RecurringItem[],
-  pendingFutureNotes: FutureNoteImport[] = [],
   days = 30,
 ): CashflowTimelineItem[] {
   const now = new Date();
@@ -228,17 +226,9 @@ export function buildCashflowTimeline(
       type: item.type,
     }));
 
-  const futureNotes = pendingFutureNotes.map((note) => ({
-    id: `future-note-${note.id}`,
-    label: note.title,
-    date: note.due_date,
-    amount: -note.amount,
-    type: 'future_note' as const,
-  }));
-
   let runningBalance = startingBalance;
 
-  return [...recurring, ...futureNotes]
+  return recurring
     .filter((item) => {
       const due = new Date(item.date);
       return due >= now && due <= end;
