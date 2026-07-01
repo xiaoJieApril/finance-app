@@ -24,7 +24,6 @@ interface CustomAlertProps {
 export const CustomAlert = ({ config, hideAlert }: CustomAlertProps) => {
   if (!config || !config.visible) return null;
 
-  // 根據不同類型顯示對應的顏色與圖示
   const getIcon = () => {
     switch (config.type) {
       case 'success': return <View className="bg-emerald-100 p-3 rounded-full mb-4"><CheckCircle2 size={36} color="#10b981" /></View>;
@@ -44,19 +43,16 @@ export const CustomAlert = ({ config, hideAlert }: CustomAlertProps) => {
     hideAlert();
   };
 
-  // 決定按鈕顏色
   const btnColor = config.type === 'error' ? 'bg-rose-500' : config.type === 'warning' ? 'bg-amber-500' : 'bg-indigo-600';
 
   return (
     <Modal visible={config.visible} transparent animationType="fade">
       <View className="flex-1 bg-black/40 justify-center items-center px-8">
-        {/* 彈跳視窗本體 */}
-        <View className="bg-white w-full rounded-[32px] p-8 items-center shadow-2xl">
+        <View className="bg-white w-full rounded-2xl p-6 items-center shadow-2xl">
           {getIcon()}
-          <Text className="text-2xl font-bold text-slate-900 mb-3">{config.title}</Text>
+          <Text className="text-xl font-black text-slate-900 mb-3">{config.title}</Text>
           <Text className="text-slate-500 text-center mb-8 leading-relaxed text-base">{config.message}</Text>
 
-          {/* 按鈕區塊 */}
           <View className="flex-row w-full gap-3">
             {config.showCancel && (
               <TouchableOpacity

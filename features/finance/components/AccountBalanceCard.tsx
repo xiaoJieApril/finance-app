@@ -13,9 +13,9 @@ function AccountIcon({ type }: { type: FinanceAccount['type'] }) {
 
 export function AccountBalanceCard({ account }: { account: FinanceAccount }) {
   return (
-    <View className="bg-white border border-slate-100 rounded-2xl p-4 mr-3 min-w-[170px]">
+    <View className="bg-white border border-slate-200 rounded-xl p-4 mr-3 min-w-[176px]">
       <View className="flex-row items-center mb-3">
-        <View className="w-9 h-9 rounded-xl bg-indigo-50 items-center justify-center mr-3">
+        <View className="w-9 h-9 rounded-lg bg-indigo-50 items-center justify-center mr-3">
           <AccountIcon type={account.type} />
         </View>
         <View className="flex-1">
@@ -25,7 +25,7 @@ export function AccountBalanceCard({ account }: { account: FinanceAccount }) {
           <Text className="text-xs text-slate-400">{account.currency}</Text>
         </View>
       </View>
-      <Text className="text-xl font-black text-slate-900">
+      <Text className="text-xl font-black text-slate-900" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72}>
         {formatMoney(account.current_balance ?? account.initial_balance)}
       </Text>
     </View>

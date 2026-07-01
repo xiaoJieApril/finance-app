@@ -1,6 +1,6 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
-import { Bell, CalendarClock, ChevronRight, Shield, WalletCards } from 'lucide-react-native';
+import { Bell, CalendarClock, ChevronRight, Code2, Database, Shield, Sparkles, WalletCards } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -16,11 +16,30 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 import { AlertConfig, CustomAlert } from '@/shared/ui/CustomAlert';
 import { CustomButton } from '@/shared/ui/CustomButton';
 import { useNotificationSettings } from '@/shared/hooks/useNotificationSettings';
+import { useFinanceOverview } from '@/features/finance/hooks/useFinanceOverview';
+import { isSupabaseConfigured } from '@/infrastructure/supabase/client';
+import { appBuildInfo, appVariant, developerText, showDeveloperTools } from '@/shared/config/appVariant';
+
+function DiagnosticRow({ label, value, tone = 'neutral' }: { label: string; value: string; tone?: 'neutral' | 'ok' | 'warn' }) {
+  const valueClass = tone === 'ok' ? 'text-emerald-600' : tone === 'warn' ? 'text-amber-600' : 'text-slate-700';
+
+  return (
+    <View className="flex-row items-center justify-between py-2 border-t border-slate-50">
+      <Text className="text-slate-500 text-sm font-bold">{label}</Text>
+      <Text className={`${valueClass} text-sm font-black`} numberOfLines={1}>
+        {value}
+      </Text>
+    </View>
+  );
+}
 
 export default function ProfileScreen() {
   const router = useRouter();
   const { signOut, isLoading: isSignOutLoading } = useAuth();
   const { settings, updateSettings } = useNotificationSettings();
+  const { financeData } = useFinanceOverview();
+  const dataSource = financeData.data?.source ?? (financeData.isLoading ? 'loading' : 'unknown');
+  const isAiConfigured = Boolean(process.env.EXPO_PUBLIC_GEMINI_API_KEY);
 
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [alertConfig, setAlertConfig] = useState<AlertConfig>({
@@ -57,6 +76,41 @@ export default function ProfileScreen() {
           <Text className="text-3xl font-extrabold text-slate-900 tracking-tight mb-8">
             個人設定
           </Text>
+
+          {showDeveloperTools && (
+            <View className="bg-slate-900 rounded-2xl mb-4 shadow-sm overflow-hidden">
+              <View className="flex-row items-center px-4 pt-4 pb-3">
+                <View className="w-10 h-10 bg-indigo-500/20 rounded-full items-center justify-center mr-3">
+                  <Code2 color="#c7d2fe" size={20} />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-white font-black text-lg">開發者工具</Text>
+                  <Text className="text-slate-400 text-xs mt-0.5">Developer Build diagnostics</Text>
+                </View>
+                <View className="bg-indigo-500 rounded-full px-3 py-1">
+                  <Text className="text-white text-[11px] font-black">Developer</Text>
+                </View>
+              </View>
+
+              <View className="bg-white px-4 pb-2">
+                <DiagnosticRow label="App variant" value={appVariant} tone="ok" />
+                <DiagnosticRow label="App version" value={appBuildInfo.appVersion} />
+                <DiagnosticRow label="Runtime" value={appBuildInfo.runtimeVersion} />
+                <DiagnosticRow label="Build channel" value={appBuildInfo.channel} />
+                <DiagnosticRow
+                  label="Supabase"
+                  value={isSupabaseConfigured ? 'configured' : 'missing'}
+                  tone={isSupabaseConfigured ? 'ok' : 'warn'}
+                />
+                <DiagnosticRow
+                  label="Gemini AI"
+                  value={isAiConfigured ? 'configured' : 'missing'}
+                  tone={isAiConfigured ? 'ok' : 'warn'}
+                />
+                <DiagnosticRow label="Data source" value={dataSource} tone={dataSource === 'v2' ? 'ok' : 'warn'} />
+              </View>
+            </View>
+          )}
 
           {/* 通知設定 */}
           <View className="bg-white rounded-2xl mb-4 shadow-sm border border-slate-100 overflow-hidden">
@@ -152,10 +206,29 @@ export default function ProfileScreen() {
             </View>
             <View className="flex-1">
               <Text className="text-slate-800 font-bold text-lg">隱私保護</Text>
-              <Text className="text-slate-400 text-xs mt-0.5">.env 已從 Git 追蹤移除並加入 ignore</Text>
+              <Text className="text-slate-400 text-xs mt-0.5">
+                {developerText('.env 已從 Git 追蹤移除並加入 ignore', '你的資料會透過安全連線同步。')}
+              </Text>
             </View>
             <ChevronRight color="#cbd5e1" size={20} />
           </View>
+
+          {showDeveloperTools && (
+            <View className="flex-row gap-3 mb-4">
+              <View className="flex-1 bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+                <Database color="#4f46e5" size={20} />
+                <Text className="text-slate-800 font-black mt-3">Schema</Text>
+                <Text className="text-slate-400 text-xs mt-1">Baseline migration only</Text>
+              </View>
+              <View className="flex-1 bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+                <Sparkles color="#7c3aed" size={20} />
+                <Text className="text-slate-800 font-black mt-3">AI</Text>
+                <Text className="text-slate-400 text-xs mt-1">
+                  {isAiConfigured ? 'Ready for assistant testing' : 'Missing Gemini key'}
+                </Text>
+              </View>
+            </View>
+          )}
 
           <CustomButton
             title="登出帳號"

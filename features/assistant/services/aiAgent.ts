@@ -5,6 +5,7 @@
  * responses into either chat text or a report shape the UI can render.
  */
 import { AssistantMode, ReviewPeriod } from '@/features/assistant/utils/financeContext';
+import { developerText } from '@/shared/config/appVariant';
 
 export type ChatRole = 'user' | 'assistant';
 
@@ -289,7 +290,12 @@ export async function sendChatMessage({
   const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
 
   if (!apiKey) {
-    throw new Error('尚未設定 Gemini API Key，請在 .env 檔案中加入 EXPO_PUBLIC_GEMINI_API_KEY');
+    throw new Error(
+      developerText(
+        '尚未設定 Gemini API Key，請在 .env 檔案中加入 EXPO_PUBLIC_GEMINI_API_KEY',
+        'AI 助手目前尚未啟用，請稍後再試。',
+      ),
+    );
   }
 
   const modeHint =
@@ -328,12 +334,22 @@ export async function sendChatMessage({
   if (!response.ok) {
     const errorBody = await response.text();
     if (response.status === 400 || response.status === 403) {
-      throw new Error('API Key 無效或請求格式錯誤，請檢查 .env 中的 EXPO_PUBLIC_GEMINI_API_KEY');
+      throw new Error(
+        developerText(
+          'API Key 無效或請求格式錯誤，請檢查 .env 中的 EXPO_PUBLIC_GEMINI_API_KEY',
+          'AI 助手暫時無法連線，請稍後再試。',
+        ),
+      );
     }
     if (response.status === 429) {
       throw new Error('請求過於頻繁，請稍後再試');
     }
-    throw new Error(`AI 服務錯誤 (${response.status}): ${errorBody}`);
+    throw new Error(
+      developerText(
+        `AI 服務錯誤 (${response.status}): ${errorBody}`,
+        'AI 助手暫時無法完成回覆，請稍後再試。',
+      ),
+    );
   }
 
   const data = await response.json();

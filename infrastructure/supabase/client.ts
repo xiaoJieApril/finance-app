@@ -8,6 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
 import 'react-native-url-polyfill/auto';
+import { showDeveloperTools } from '@/shared/config/appVariant';
 
 // 建立一個安全的儲存轉接器 (解決 window is not defined 的報錯)
 const customStorageAdapter = {
@@ -42,7 +43,11 @@ const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY as string;
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
 if (!isSupabaseConfigured) {
-  console.error('缺少 Supabase 環境變數，請檢查 .env 檔案是否配置正確。');
+  console.error(
+    showDeveloperTools
+      ? '缺少 Supabase 環境變數，請檢查 .env 檔案是否配置正確。'
+      : '資料同步設定未完成。',
+  );
 }
 
 const safeSupabaseUrl = supabaseUrl || 'https://placeholder.supabase.co';

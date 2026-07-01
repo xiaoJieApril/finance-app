@@ -1,6 +1,6 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
-import { Bell, CalendarDays, Coffee, Plus, ShieldCheck, SlidersHorizontal, Utensils, User, X } from 'lucide-react-native';
+import { AlertTriangle, Bell, CalendarDays, Coffee, Plus, RefreshCw, ShieldCheck, SlidersHorizontal, Utensils, User, X } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -58,7 +58,7 @@ const QUICK_TEMPLATES = [
 
 export default function OverviewScreen() {
   const router = useRouter();
-  const { overview, financeData, saveEntry, isLoading } = useFinanceOverview();
+  const { overview, financeData, saveEntry, isLoading, error } = useFinanceOverview();
   const data = financeData.data;
 
   const [modalVisible, setModalVisible] = useState(false);
@@ -105,10 +105,11 @@ export default function OverviewScreen() {
 
   const openNewEntry = () => {
     const firstAccount = data?.accounts[0]?.id ?? null;
+    const firstExpenseCategory = data?.categories.find((category) => category.type === 'expense')?.id ?? null;
     setType('expense');
     setAccountId(firstAccount);
     setToAccountId(data?.accounts[1]?.id ?? firstAccount);
-    setCategoryId(null);
+    setCategoryId(firstExpenseCategory);
     setCurrency('MYR');
     setAmount('');
     setNote('');
@@ -118,13 +119,32 @@ export default function OverviewScreen() {
   };
 
   const applyTemplate = (template: (typeof QUICK_TEMPLATES)[number]) => {
+    const firstAccount = data?.accounts[0]?.id ?? null;
     setType('expense');
+    setAccountId((current) => current ?? firstAccount);
+    setToAccountId(data?.accounts.find((account) => account.id !== firstAccount)?.id ?? firstAccount);
     setAmount(template.amount);
     setNote(template.note);
     const expenseCategories = data?.categories.filter((category) => category.type === 'expense') ?? [];
     const matched = expenseCategories.find((category) => template.note.includes(category.name) || category.name.includes(template.note));
     setCategoryId(matched?.id ?? expenseCategories[0]?.id ?? null);
     setModalVisible(true);
+  };
+
+  const handleTypeChange = (nextType: TransactionType) => {
+    setType(nextType);
+    if (nextType === 'transfer') {
+      setCategoryId(null);
+      setToAccountId((current) => {
+        if (current && current !== accountId) return current;
+        return data?.accounts.find((account) => account.id !== accountId)?.id ?? null;
+      });
+      return;
+    }
+
+    const nextCategory = data?.categories.find((category) => category.type === nextType)?.id ?? null;
+    setCategoryId(nextCategory);
+    setToAccountId(null);
   };
 
   const handleSave = async () => {
@@ -171,6 +191,29 @@ export default function OverviewScreen() {
   };
 
   if (isLoading || !overview || !data) {
+    if (error && !isLoading) {
+      return (
+        <View className="flex-1 justify-center bg-slate-50 px-6">
+          <View className="bg-white border border-rose-100 rounded-2xl p-5">
+            <View className="w-11 h-11 rounded-xl bg-rose-50 items-center justify-center mb-4">
+              <AlertTriangle size={22} color="#e11d48" />
+            </View>
+            <Text className="text-xl font-black text-slate-900 mb-2">財務資料載入失敗</Text>
+            <Text className="text-sm text-slate-500 leading-6 mb-5">
+              {error instanceof Error ? error.message : '請確認登入狀態與資料庫連線後再重試。'}
+            </Text>
+            <TouchableOpacity
+              onPress={() => financeData.refetch()}
+              className="bg-indigo-600 rounded-2xl p-4 flex-row items-center justify-center"
+            >
+              <RefreshCw size={18} color="white" />
+              <Text className="text-white font-black ml-2">重新載入</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      );
+    }
+
     return (
       <View className="flex-1 justify-center items-center bg-slate-50">
         <ActivityIndicator size="large" color="#4f46e5" />
@@ -463,7 +506,7 @@ export default function OverviewScreen() {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
-              <FilterBar options={[...TYPE_OPTIONS]} value={type} onChange={(value) => setType(value)} />
+              <FilterBar options={[...TYPE_OPTIONS]} value={type} onChange={handleTypeChange} />
               <Text className="text-sm font-bold text-slate-500 mb-2">帳戶</Text>
               <FilterBar
                 options={data.accounts.map((account) => ({ label: account.name, value: account.id }))}

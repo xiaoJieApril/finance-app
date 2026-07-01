@@ -26,6 +26,7 @@ Route files should stay thin: they can own screen-local form state, but shared b
 
 - `shared/ui/`: reusable UI controls and alerts.
 - `shared/components/`: generic Expo starter-style components that are not finance-domain-specific.
+- `shared/config/`: app-wide runtime config such as developer vs normal-user variant flags.
 - `shared/hooks/`: app-level hooks such as theme, color scheme, and local notification settings.
 - `shared/theme/`: static theme constants.
 - `shared/store/`: cross-feature UI state.
@@ -33,9 +34,15 @@ Route files should stay thin: they can own screen-local form state, but shared b
 ## Infrastructure And Operations
 
 - `infrastructure/supabase/client.ts`: the configured Supabase client and auth storage adapter.
-- `supabase/migrations/`: database schema migrations.
+- `supabase/migrations/`: the fresh-database baseline schema. The current baseline excludes removed import tables and replaces the older split migration history.
 - `supabase/functions/`: Edge Functions for backend workflows when needed.
-- `scripts/`: local project scripts for assets, imports, and maintenance.
+- `scripts/`: local project scripts for assets and maintenance.
+
+## App Variants
+
+- Developer version is controlled by `EXPO_PUBLIC_APP_VARIANT=developer` and `EXPO_PUBLIC_ENABLE_DEVELOPER_TOOLS=true`.
+- Developer tools are shown in Profile and include Supabase status, Gemini AI status, app version, build channel, and current finance data source.
+- Normal-user version uses `EXPO_PUBLIC_APP_VARIANT=normal` and hides developer diagnostics and technical setup wording.
 
 ## Import Rules
 

@@ -90,7 +90,7 @@ export function calculateAccountBalances(accounts: FinanceAccount[], entries: Tr
 
     return {
       ...account,
-      current_balance: account.current_balance ?? account.initial_balance + movement,
+      current_balance: account.initial_balance + movement,
     };
   });
 }

@@ -14,6 +14,7 @@ import { LogBox, Text, View } from 'react-native';
 import { useAuthSession } from '@/features/auth/hooks/useAuthSession';
 import { useNotificationPermissions } from '@/shared/hooks/useNotificationPermissions';
 import { isSupabaseConfigured } from '@/infrastructure/supabase/client';
+import { developerText, showDeveloperTools } from '@/shared/config/appVariant';
 
 LogBox.ignoreLogs([
   '"shadow*" style props are deprecated. Use "boxShadow".',
@@ -53,10 +54,19 @@ function AppShell() {
     return (
       <View className="flex-1 bg-slate-50 px-6 justify-center">
         <View className="bg-white border border-rose-100 rounded-2xl p-5">
-          <Text className="text-2xl font-black text-slate-900 mb-3">App 設定未完成</Text>
+          {showDeveloperTools && (
+            <View className="self-start bg-indigo-50 border border-indigo-100 rounded-full px-3 py-1 mb-3">
+              <Text className="text-indigo-700 text-xs font-black">Developer Build</Text>
+            </View>
+          )}
+          <Text className="text-2xl font-black text-slate-900 mb-3">
+            {developerText('App 設定未完成', '資料同步暫時無法使用')}
+          </Text>
           <Text className="text-slate-600 leading-6">
-            這個 build 缺少 Supabase 環境變數。請在 EAS 設定
-            EXPO_PUBLIC_SUPABASE_URL 和 EXPO_PUBLIC_SUPABASE_ANON_KEY 後重新 build。
+            {developerText(
+              '這個 build 缺少 Supabase 環境變數。請在 EAS 設定 EXPO_PUBLIC_SUPABASE_URL 和 EXPO_PUBLIC_SUPABASE_ANON_KEY 後重新 build。',
+              '目前無法連接資料服務。請稍後再試，或聯絡支援人員協助檢查帳號設定。',
+            )}
           </Text>
         </View>
       </View>
