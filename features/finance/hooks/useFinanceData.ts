@@ -19,17 +19,21 @@ import {
   upsertBudget,
   upsertFinanceCategory,
   upsertRecurringItem,
+  upsertSavingPlan,
   upsertSavingsGoal,
   upsertSpendingRule,
   upsertTransactionEntry,
 } from '@/features/finance/services/financeRepository';
 import { FinanceCategory, TransactionEntry } from '@/features/finance/types';
+import { useAuthSession } from '@/features/auth/hooks/useAuthSession';
 
 export function useFinanceData() {
   const queryClient = useQueryClient();
+  const { session, isInitialized } = useAuthSession();
   const financeData = useQuery({
     queryKey: financeQueryKeys.financeData,
     queryFn: getFinanceData,
+    enabled: isInitialized && Boolean(session),
   });
 
   const invalidate = () => {
@@ -37,6 +41,7 @@ export function useFinanceData() {
     queryClient.invalidateQueries({ queryKey: financeQueryKeys.transactions });
     queryClient.invalidateQueries({ queryKey: financeQueryKeys.categories });
     queryClient.invalidateQueries({ queryKey: financeQueryKeys.spendingRules });
+    queryClient.invalidateQueries({ queryKey: financeQueryKeys.savingPlan });
   };
 
   const saveEntry = useMutation({
@@ -109,6 +114,11 @@ export function useFinanceData() {
     onSuccess: invalidate,
   });
 
+  const saveSavingPlan = useMutation({
+    mutationFn: upsertSavingPlan,
+    onSuccess: invalidate,
+  });
+
   return {
     financeData,
     saveEntry,
@@ -125,5 +135,6 @@ export function useFinanceData() {
     removeRecurringItem,
     saveSpendingRule,
     removeSpendingRule,
+    saveSavingPlan,
   };
 }

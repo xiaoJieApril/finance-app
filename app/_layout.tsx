@@ -8,10 +8,9 @@ import '../global.css';
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as Notifications from 'expo-notifications';
-import { Stack, useRouter, useSegments } from 'expo-router';
-import React, { useEffect } from 'react';
+import { Stack } from 'expo-router';
+import React from 'react';
 import { LogBox, Text, View } from 'react-native';
-import { useAuthSession } from '@/features/auth/hooks/useAuthSession';
 import { useNotificationPermissions } from '@/shared/hooks/useNotificationPermissions';
 import { isSupabaseConfigured } from '@/infrastructure/supabase/client';
 import { developerText, showDeveloperTools } from '@/shared/config/appVariant';
@@ -33,22 +32,7 @@ Notifications.setNotificationHandler({
 });
 
 function AppShell() {
-  const { session, isInitialized } = useAuthSession();
-  const segments = useSegments();
-  const router = useRouter();
-
   useNotificationPermissions();
-
-  useEffect(() => {
-    if (!isInitialized) return;
-    const inLoginScreen = segments[0] === 'login';
-
-    if (!session && !inLoginScreen) {
-      router.replace('/login');
-    } else if (session && inLoginScreen) {
-      router.replace('/(tabs)');
-    }
-  }, [isInitialized, router, segments, session]);
 
   if (!isSupabaseConfigured) {
     return (

@@ -11,6 +11,7 @@ import { AlertConfig, CustomAlert } from '@/shared/ui/CustomAlert';
 import { useFinanceOverview } from '@/features/finance/hooks/useFinanceOverview';
 import { CurrencyCode, TransactionEntry, TransactionType } from '@/features/finance/types';
 import { entryBaseAmount, formatMoney } from '@/features/finance/utils/finance';
+import { developerText } from '@/shared/config/appVariant';
 
 type TypeFilter = 'all' | TransactionType;
 type ViewMode = 'list' | 'calendar';
@@ -110,8 +111,13 @@ export default function HistoryScreen() {
       await deleteEntry.mutateAsync(selectedEntry);
       setSelectedEntry(null);
       setAlertConfig({ visible: true, title: '已刪除', message: '流水已刪除。', type: 'success' });
-    } catch {
-      setAlertConfig({ visible: true, title: '刪除失敗', message: '請稍後再試。', type: 'error' });
+    } catch (error) {
+      setAlertConfig({
+        visible: true,
+        title: '刪除失敗',
+        message: developerText(error instanceof Error ? error.message : '請重新整理後再試。', '刪除失敗，請重新整理後再試。'),
+        type: 'error',
+      });
     }
   };
 

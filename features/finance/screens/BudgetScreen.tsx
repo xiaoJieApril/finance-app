@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { BudgetProgressRow } from '@/features/finance/components/BudgetProgressRow';
 import { EmptyState } from '@/features/finance/components/EmptyState';
 import { FilterBar } from '@/features/finance/components/FilterBar';
@@ -9,8 +10,10 @@ import { AlertConfig, CustomAlert } from '@/shared/ui/CustomAlert';
 import { useFinanceOverview } from '@/features/finance/hooks/useFinanceOverview';
 import { FinanceBudget, FinanceCategory, SpendingRule, SpendingRulePeriod } from '@/features/finance/types';
 import { evaluateSpendingRules, formatMoney } from '@/features/finance/utils/finance';
+import { developerText } from '@/shared/config/appVariant';
 
 export default function BudgetScreen() {
+  const router = useRouter();
   const {
     overview,
     financeData,
@@ -181,7 +184,9 @@ export default function BudgetScreen() {
       setAlertConfig({
         visible: true,
         title: '儲存失敗',
-        message: data?.source === 'legacy' ? '請先套用 feature expansion migration 後再新增支出規則。' : error instanceof Error ? error.message : '請稍後再試。',
+        message: data?.source === 'legacy'
+          ? developerText('請先套用 feature expansion migration 後再新增支出規則。', '支出規則暫時無法使用，請稍後再試。')
+          : developerText(error instanceof Error ? error.message : '請稍後再試。', '支出規則暫時無法儲存，請稍後再試。'),
         type: 'error',
       });
     }
@@ -233,18 +238,40 @@ export default function BudgetScreen() {
             <Text className="text-3xl font-black text-slate-900">預算</Text>
             <Text className="text-sm text-slate-400 mt-2">追蹤類別限額與超支風險。</Text>
           </View>
-          <TouchableOpacity
-            onPress={openAddBudget}
-            className="bg-indigo-600 px-4 py-3 rounded-2xl"
-          >
-            <Text className="text-white font-black">新增</Text>
-          </TouchableOpacity>
+          <View className="items-end gap-2">
+            <TouchableOpacity
+              onPress={() => router.push('/categories')}
+              className="bg-white border border-indigo-100 px-4 py-2 rounded-2xl"
+            >
+              <Text className="text-indigo-600 font-black">管理類別</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={openAddBudget}
+              className="bg-indigo-600 px-4 py-3 rounded-2xl"
+            >
+              <Text className="text-white font-black">新增預算</Text>
+            </TouchableOpacity>
+          </View>
         </View>
+
+        {expenseCategories.length === 0 && (
+          <TouchableOpacity
+            onPress={() => router.push('/categories')}
+            className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 mb-5"
+          >
+            <Text className="text-indigo-700 font-black">先建立支出類別</Text>
+            <Text className="text-indigo-500 text-xs mt-1 leading-5">
+              預算需要綁定支出類別。點這裡建立餐飲、交通、購物等類別。
+            </Text>
+          </TouchableOpacity>
+        )}
 
         {data.source === 'legacy' && (
           <View className="bg-amber-50 border border-amber-100 rounded-2xl p-4 mb-5">
             <Text className="text-amber-700 font-bold">相容模式</Text>
-            <Text className="text-amber-600 text-xs mt-1">目前顯示舊類別的 budget_limit；新增 v2 預算需先套用 migration。</Text>
+            <Text className="text-amber-600 text-xs mt-1">
+              {developerText('目前顯示舊類別的 budget_limit；新增 v2 預算需先套用 migration。', '部分預算功能暫時無法使用，請稍後再試。')}
+            </Text>
           </View>
         )}
 

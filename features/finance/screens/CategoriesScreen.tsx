@@ -19,6 +19,7 @@ import { CustomButton } from '@/shared/ui/CustomButton';
 import { CATEGORY_ICONS, DEFAULT_CATEGORY_ICON, renderCategoryIcon } from '@/features/finance/constants/categoryIcons';
 import { useFinanceOverview } from '@/features/finance/hooks/useFinanceOverview';
 import { CategoryType, FinanceCategory } from '@/features/finance/types';
+import { developerText } from '@/shared/config/appVariant';
 
 const CATEGORY_TYPE_OPTIONS = [
   { label: '支出類別', value: 'expense' },
@@ -97,7 +98,10 @@ export default function CategoriesScreen() {
             closeModal();
             Alert.alert('成功', '類別已刪除。');
           } catch (error) {
-            Alert.alert('錯誤', error instanceof Error ? error.message : '刪除類別失敗。');
+            Alert.alert(
+              '錯誤',
+              developerText(error instanceof Error ? error.message : '刪除類別失敗，請重新整理後再試。', '刪除類別失敗，請重新整理後再試。'),
+            );
           }
         },
       },
@@ -131,7 +135,7 @@ export default function CategoriesScreen() {
           <View className="bg-amber-50 border border-amber-100 rounded-2xl p-4 mb-4">
             <Text className="font-black text-amber-800">兼容模式</Text>
             <Text className="text-xs text-amber-700 mt-1 leading-5">
-              目前正在使用舊資料表。套用 v2 migration 後，類別會寫入 finance_categories 並和新流水同步。
+              {developerText('目前正在使用舊資料表。套用 v2 migration 後，類別會寫入 finance_categories 並和新流水同步。', '類別同步正在使用相容模式，部分新功能暫時無法使用。')}
             </Text>
           </View>
         )}

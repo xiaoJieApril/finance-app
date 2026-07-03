@@ -1,9 +1,10 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
-import { AlertTriangle, Bell, CalendarDays, Coffee, Plus, RefreshCw, ShieldCheck, SlidersHorizontal, Utensils, User, X } from 'lucide-react-native';
-import React, { useMemo, useState } from 'react';
+import { AlertTriangle, Bell, CalendarDays, Coffee, PiggyBank, Plus, RefreshCw, ShieldCheck, SlidersHorizontal, Target, Utensils, User, X } from 'lucide-react-native';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -13,6 +14,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { AuthPanel } from '@/features/auth/components/AuthPanel';
+import { useAuthSession } from '@/features/auth/hooks/useAuthSession';
 import { AccountBalanceCard } from '@/features/finance/components/AccountBalanceCard';
 import { BudgetProgressRow } from '@/features/finance/components/BudgetProgressRow';
 import { EmptyState } from '@/features/finance/components/EmptyState';
@@ -22,7 +25,8 @@ import { SummaryMetric } from '@/features/finance/components/SummaryMetric';
 import { TransactionRow } from '@/features/finance/components/TransactionRow';
 import { CustomAlert, AlertConfig } from '@/shared/ui/CustomAlert';
 import { useFinanceOverview } from '@/features/finance/hooks/useFinanceOverview';
-import { CurrencyCode, TransactionType } from '@/features/finance/types';
+import { CurrencyCode, TransactionEntry, TransactionType } from '@/features/finance/types';
+import { developerText } from '@/shared/config/appVariant';
 import {
   buildCashflowTimeline,
   calculateSafeToSpend,
@@ -58,10 +62,13 @@ const QUICK_TEMPLATES = [
 
 export default function OverviewScreen() {
   const router = useRouter();
-  const { overview, financeData, saveEntry, isLoading, error } = useFinanceOverview();
+  const { session, isInitialized } = useAuthSession();
+  const { overview, financeData, saveEntry, deleteEntry, saveSavingPlan, isLoading, error } = useFinanceOverview();
   const data = financeData.data;
 
   const [modalVisible, setModalVisible] = useState(false);
+  const [selectedEntry, setSelectedEntry] = useState<TransactionEntry | null>(null);
+  const [editingEntry, setEditingEntry] = useState<TransactionEntry | null>(null);
   const [type, setType] = useState<TransactionType>('expense');
   const [accountId, setAccountId] = useState<string | null>(null);
   const [toAccountId, setToAccountId] = useState<string | null>(null);
@@ -74,6 +81,11 @@ export default function OverviewScreen() {
   const [isSavings, setIsSavings] = useState(false);
   const [scenarioAmount, setScenarioAmount] = useState('');
   const [scenarioType, setScenarioType] = useState<'expense' | 'income'>('expense');
+  const [savingPlanModalVisible, setSavingPlanModalVisible] = useState(false);
+  const [savingPlanMode, setSavingPlanMode] = useState<'rate' | 'amount'>('rate');
+  const [targetRate, setTargetRate] = useState('20');
+  const [targetAmount, setTargetAmount] = useState('300');
+  const [bufferAmount, setBufferAmount] = useState('300');
   const [alertConfig, setAlertConfig] = useState<AlertConfig>({
     visible: false,
     title: '',
@@ -103,9 +115,24 @@ export default function OverviewScreen() {
     [overview?.totalNetWorth, scenarioAmount, scenarioType],
   );
 
+  useEffect(() => {
+    if (session && data && !data.savingPlan) {
+      setSavingPlanModalVisible(true);
+    }
+  }, [data, session]);
+
+  useEffect(() => {
+    if (!data?.savingPlan) return;
+    setSavingPlanMode(data.savingPlan.mode);
+    setTargetRate(String(Math.round(data.savingPlan.target_rate * 100)));
+    setTargetAmount(String(data.savingPlan.target_amount));
+    setBufferAmount(String(data.savingPlan.buffer_amount));
+  }, [data?.savingPlan]);
+
   const openNewEntry = () => {
     const firstAccount = data?.accounts[0]?.id ?? null;
     const firstExpenseCategory = data?.categories.find((category) => category.type === 'expense')?.id ?? null;
+    setEditingEntry(null);
     setType('expense');
     setAccountId(firstAccount);
     setToAccountId(data?.accounts[1]?.id ?? firstAccount);
@@ -115,6 +142,24 @@ export default function OverviewScreen() {
     setNote('');
     setDate(new Date());
     setIsSavings(false);
+    setModalVisible(true);
+  };
+
+  const openEditEntry = (entry: TransactionEntry) => {
+    const nextType = entry.type;
+    const firstAccount = data?.accounts[0]?.id ?? null;
+    const typeCategories = data?.categories.filter((category) => category.type === nextType) ?? [];
+    setSelectedEntry(null);
+    setEditingEntry(entry);
+    setType(nextType);
+    setAccountId(entry.account_id ?? firstAccount);
+    setToAccountId(entry.to_account_id ?? data?.accounts.find((account) => account.id !== entry.account_id)?.id ?? null);
+    setCategoryId(nextType === 'transfer' ? null : entry.category_id ?? typeCategories[0]?.id ?? null);
+    setCurrency(entry.currency ?? 'MYR');
+    setAmount(String(entry.amount));
+    setNote(entry.note ?? '');
+    setDate(new Date(entry.date));
+    setIsSavings(Boolean(entry.is_savings));
     setModalVisible(true);
   };
 
@@ -168,6 +213,7 @@ export default function OverviewScreen() {
 
     try {
       await saveEntry.mutateAsync({
+        id: editingEntry?.id,
         type,
         account_id: accountId,
         to_account_id: type === 'transfer' ? toAccountId : null,
@@ -179,7 +225,17 @@ export default function OverviewScreen() {
         is_savings: type === 'income' ? isSavings : false,
       });
       setModalVisible(false);
-      setAlertConfig({ visible: true, title: '已儲存', message: '交易已加入流水。', type: 'success' });
+      setEditingEntry(null);
+      setAlertConfig({
+        visible: true,
+        title: editingEntry ? '已更新' : '已儲存',
+        message: overview?.spendAllowance.status === 'danger'
+          ? '交易已儲存。本月安全可花額已偏低，接下來先停一下非必要支出。'
+          : overview?.spendAllowance.status === 'tight'
+            ? '交易已儲存。本月現金流偏緊，今天先按可花額走。'
+            : editingEntry ? '交易已儲存修改。' : '交易已加入流水。',
+        type: 'success',
+      });
     } catch (error) {
       setAlertConfig({
         visible: true,
@@ -190,6 +246,80 @@ export default function OverviewScreen() {
     }
   };
 
+  const handleDeleteSelectedEntry = async () => {
+    if (!selectedEntry) return;
+
+    try {
+      await deleteEntry.mutateAsync(selectedEntry);
+      setSelectedEntry(null);
+      setAlertConfig({ visible: true, title: '已刪除', message: '流水已刪除。', type: 'success' });
+    } catch (error) {
+      setAlertConfig({
+        visible: true,
+        title: '刪除失敗',
+        message: developerText(error instanceof Error ? error.message : '請重新整理後再試。', '刪除失敗，請重新整理後再試。'),
+        type: 'error',
+      });
+    }
+  };
+
+  const loadErrorMessage = error instanceof Error ? error.message : '請確認登入狀態與資料庫連線後再重試。';
+
+  const handleSaveSavingPlan = async () => {
+    const parsedRate = Math.max(Number(targetRate) || 20, 0) / 100;
+    const parsedAmount = Math.max(Number(targetAmount) || 300, 0);
+    const parsedBuffer = Math.max(Number(bufferAmount) || 300, 0);
+
+    try {
+      await saveSavingPlan.mutateAsync({
+        id: data?.savingPlan?.id,
+        mode: savingPlanMode,
+        target_rate: parsedRate,
+        target_amount: parsedAmount,
+        buffer_amount: parsedBuffer,
+        is_active: true,
+      });
+      setSavingPlanModalVisible(false);
+      setAlertConfig({ visible: true, title: '存錢計劃已啟用', message: '我會用這個目標計算每日可花額。', type: 'success' });
+    } catch (error) {
+      setAlertConfig({
+        visible: true,
+        title: '儲存失敗',
+        message: developerText(error instanceof Error ? error.message : '請稍後再試。', '存錢計劃暫時無法儲存，請稍後再試。'),
+        type: 'error',
+      });
+    }
+  };
+
+  if (!isInitialized) {
+    return (
+      <View className="flex-1 justify-center items-center bg-slate-50">
+        <ActivityIndicator size="large" color="#4f46e5" />
+      </View>
+    );
+  }
+
+  if (!session) {
+    return (
+      <View className="flex-1 bg-slate-50 px-5 pt-12">
+        <View className="mb-8">
+          <Text className="text-sm font-semibold text-slate-400">Finance Tracker</Text>
+          <Text className="text-3xl font-black text-slate-900 mt-1">一眼掌握現金流</Text>
+          <Text className="text-slate-500 mt-3 leading-6">
+            登入、註冊，或用訪客身份先試用。你的資料會在登入後自動同步。
+          </Text>
+        </View>
+        <Modal visible transparent animationType="slide">
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1 justify-end bg-black/35">
+            <View className="px-5 pb-6">
+              <AuthPanel />
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
+      </View>
+    );
+  }
+
   if (isLoading || !overview || !data) {
     if (error && !isLoading) {
       return (
@@ -198,9 +328,11 @@ export default function OverviewScreen() {
             <View className="w-11 h-11 rounded-xl bg-rose-50 items-center justify-center mb-4">
               <AlertTriangle size={22} color="#e11d48" />
             </View>
-            <Text className="text-xl font-black text-slate-900 mb-2">財務資料載入失敗</Text>
+            <Text className="text-xl font-black text-slate-900 mb-2">
+              {developerText('財務資料載入失敗', '資料同步暫時失敗')}
+            </Text>
             <Text className="text-sm text-slate-500 leading-6 mb-5">
-              {error instanceof Error ? error.message : '請確認登入狀態與資料庫連線後再重試。'}
+              {developerText(loadErrorMessage, '請重新載入。如果問題持續發生，請稍後再試。')}
             </Text>
             <TouchableOpacity
               onPress={() => financeData.refetch()}
@@ -239,12 +371,118 @@ export default function OverviewScreen() {
 
         {data.source === 'legacy' && (
           <View className="bg-amber-50 border border-amber-100 rounded-2xl p-4 mb-4">
-            <Text className="text-amber-700 font-bold">目前使用 legacy 相容模式</Text>
+            <Text className="text-amber-700 font-bold">{developerText('目前使用 legacy 相容模式', '資料同步相容模式')}</Text>
             <Text className="text-amber-600 text-xs mt-1">
-              套用 v2 Supabase migration 後即可啟用帳戶、轉帳、多幣快取與固定帳單。
+              {developerText('套用 v2 Supabase migration 後即可啟用帳戶、轉帳、多幣快取與固定帳單。', '部分進階功能暫時無法使用，資料同步恢復後會自動更新。')}
             </Text>
           </View>
         )}
+
+        <View className={`border rounded-2xl p-5 mb-5 ${
+          overview.spendAllowance.status === 'danger'
+            ? 'bg-rose-50 border-rose-100'
+            : overview.spendAllowance.status === 'tight'
+              ? 'bg-amber-50 border-amber-100'
+              : 'bg-emerald-50 border-emerald-100'
+        }`}>
+          <View className="flex-row items-center justify-between mb-3">
+            <View className="flex-row items-center">
+              <View className="w-10 h-10 rounded-xl bg-white/70 items-center justify-center mr-3">
+                <PiggyBank
+                  size={20}
+                  color={overview.spendAllowance.status === 'danger' ? '#e11d48' : overview.spendAllowance.status === 'tight' ? '#d97706' : '#059669'}
+                />
+              </View>
+              <View>
+                <Text className="font-black text-slate-900">今天安全可花</Text>
+                <Text className="text-xs text-slate-500">
+                  {overview.savingPlan.estimated ? '收入不足，先用估算目標' : '已扣除固定帳單、緩衝與本月應存'}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity onPress={() => setSavingPlanModalVisible(true)} className="bg-white/80 px-3 py-2 rounded-xl">
+              <Text className="text-xs font-black text-indigo-600">調整</Text>
+            </TouchableOpacity>
+          </View>
+          <Text className={`text-4xl font-black ${
+            overview.spendAllowance.status === 'danger'
+              ? 'text-rose-600'
+              : overview.spendAllowance.status === 'tight'
+                ? 'text-amber-600'
+                : 'text-emerald-600'
+          }`}>
+            {formatMoney(overview.spendAllowance.dailyAllowance)}
+          </Text>
+          <View className="flex-row gap-3 mt-4">
+            <View className="flex-1 bg-white/70 rounded-xl p-3">
+              <Text className="text-[11px] font-bold text-slate-400">本週可花</Text>
+              <Text className="font-black text-slate-800 mt-1">{formatMoney(overview.spendAllowance.weeklyAllowance)}</Text>
+            </View>
+            <View className="flex-1 bg-white/70 rounded-xl p-3">
+              <Text className="text-[11px] font-bold text-slate-400">本月剩餘可花</Text>
+              <Text className="font-black text-slate-800 mt-1">{formatMoney(overview.spendAllowance.monthlyRemaining)}</Text>
+            </View>
+          </View>
+        </View>
+
+        <View className="bg-white border border-slate-100 rounded-2xl p-4 mb-5">
+          <View className="flex-row items-center justify-between mb-3">
+            <View className="flex-row items-center">
+              <View className="w-10 h-10 rounded-xl bg-indigo-50 items-center justify-center mr-3">
+                <Target size={20} color="#4f46e5" />
+              </View>
+              <View>
+                <Text className="font-black text-slate-900">本月存錢進度</Text>
+                <Text className="text-xs text-slate-400">目標和每日可花額會連動</Text>
+              </View>
+            </View>
+            <Text className="font-black text-indigo-600">
+              {Math.round(overview.savingPlan.targetRate * 100)}%
+            </Text>
+          </View>
+          <View className="h-2.5 bg-slate-100 rounded-full overflow-hidden mb-2">
+            <View
+              className="h-full bg-indigo-600 rounded-full"
+              style={{ width: `${Math.min((overview.savingPlan.markedSavings / Math.max(overview.savingPlan.requiredSavings, 1)) * 100, 100)}%` }}
+            />
+          </View>
+          <View className="flex-row justify-between">
+            <Text className="text-xs text-slate-500">
+              應存 {formatMoney(overview.savingPlan.requiredSavings)}
+            </Text>
+            <Text className="text-xs text-slate-500">
+              還差 {formatMoney(overview.savingPlan.shortfall)}
+            </Text>
+          </View>
+          {overview.goals.length > 0 && (
+            <View className="bg-indigo-50 rounded-xl p-3 mt-3">
+              <Text className="text-[11px] font-bold text-indigo-500 mb-1">主要目標</Text>
+              <Text className="text-indigo-900 font-black">
+                {(overview.goals.find((goal) => goal.is_primary) ?? overview.goals[0]).name}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        <View className="bg-slate-900 rounded-2xl p-4 mb-6">
+          <View className="flex-row items-center mb-3">
+            <View className="w-9 h-9 rounded-xl bg-white/10 items-center justify-center mr-3">
+              <ShieldCheck size={18} color="#a7f3d0" />
+            </View>
+            <View>
+              <Text className="text-white font-black">存錢教練</Text>
+              <Text className="text-slate-400 text-xs">嚴格但不羞辱，只給今天能做的事</Text>
+            </View>
+          </View>
+          {overview.savingCoachSignals.map((signal, index) => (
+            <View key={`${signal.text}-${index}`} className="flex-row py-2 border-t border-white/10">
+              <View className={`w-2 h-2 rounded-full mt-2 mr-3 ${
+                signal.tone === 'danger' ? 'bg-rose-400' : signal.tone === 'tight' ? 'bg-amber-300' : 'bg-emerald-300'
+              }`} />
+              <Text className="flex-1 text-slate-200 text-sm leading-6">{signal.text}</Text>
+            </View>
+          ))}
+        </View>
 
         <View className="flex-row gap-3 mb-3">
           <SummaryMetric label="收入" value={formatMoney(overview.cashFlow.income)} tone="income" />
@@ -484,7 +722,9 @@ export default function OverviewScreen() {
         {latestEntries.length === 0 ? (
           <EmptyState title="還沒有交易紀錄" message="點擊右下角 + 開始記第一筆。" />
         ) : (
-          latestEntries.map((entry) => <TransactionRow key={entry.id} entry={entry} />)
+          latestEntries.map((entry) => (
+            <TransactionRow key={entry.id} entry={entry} onPress={() => setSelectedEntry(entry)} />
+          ))
         )}
       </ScrollView>
 
@@ -499,8 +739,14 @@ export default function OverviewScreen() {
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1 justify-end bg-black/40">
           <View className="bg-white rounded-t-3xl p-5 max-h-[88%]">
             <View className="flex-row items-center justify-between mb-4">
-              <Text className="text-xl font-black text-slate-900">新增交易</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)} className="w-9 h-9 items-center justify-center">
+              <Text className="text-xl font-black text-slate-900">{editingEntry ? '修改交易' : '新增交易'}</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setModalVisible(false);
+                  setEditingEntry(null);
+                }}
+                className="w-9 h-9 items-center justify-center"
+              >
                 <X size={22} color="#64748b" />
               </TouchableOpacity>
             </View>
@@ -609,10 +855,118 @@ export default function OverviewScreen() {
                 className="bg-indigo-600 rounded-2xl p-4 items-center"
               >
                 <Text className="text-white font-black text-base">
-                  {saveEntry.isPending ? '儲存中...' : '儲存交易'}
+                  {saveEntry.isPending ? '儲存中...' : editingEntry ? '儲存修改' : '儲存交易'}
                 </Text>
               </TouchableOpacity>
             </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal visible={Boolean(selectedEntry)} transparent animationType="fade" onRequestClose={() => setSelectedEntry(null)}>
+        <TouchableOpacity className="flex-1 bg-black/40 justify-end" activeOpacity={1} onPress={() => setSelectedEntry(null)}>
+          <View className="bg-white rounded-t-3xl p-6">
+            <Text className="text-xl font-black text-slate-900 mb-1">流水操作</Text>
+            <Text className="text-slate-400 mb-5">{selectedEntry?.note || selectedEntry?.category?.name || '未分類'}</Text>
+            <TouchableOpacity
+              className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 items-center mb-3 flex-row justify-center"
+              onPress={() => selectedEntry && openEditEntry(selectedEntry)}
+            >
+              <RefreshCw size={18} color="#4f46e5" />
+              <Text className="text-indigo-600 font-black ml-2">修改流水</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              className="bg-rose-50 border border-rose-100 rounded-2xl p-4 items-center mb-3"
+              disabled={deleteEntry.isPending}
+              onPress={() =>
+                Alert.alert('確認刪除', '確定要刪除這筆流水嗎？', [
+                  { text: '取消', style: 'cancel' },
+                  { text: '刪除', style: 'destructive', onPress: handleDeleteSelectedEntry },
+                ])
+              }
+            >
+              <Text className="text-rose-600 font-black">
+                {deleteEntry.isPending ? '刪除中...' : '刪除流水'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity className="p-4 items-center" onPress={() => setSelectedEntry(null)}>
+              <Text className="text-slate-400 font-bold">取消</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal visible={savingPlanModalVisible} transparent animationType="slide" onRequestClose={() => setSavingPlanModalVisible(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1 justify-end bg-black/40">
+          <View className="bg-white rounded-t-3xl p-5">
+            <View className="flex-row items-center justify-between mb-4">
+              <View>
+                <Text className="text-xl font-black text-slate-900">設定本月存錢計劃</Text>
+                <Text className="text-xs text-slate-400 mt-1">先把該存的留住，再決定能花多少。</Text>
+              </View>
+              <TouchableOpacity onPress={() => setSavingPlanModalVisible(false)} className="w-9 h-9 items-center justify-center">
+                <X size={22} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            <FilterBar
+              options={[
+                { label: '按收入比例', value: 'rate' },
+                { label: '固定金額', value: 'amount' },
+              ]}
+              value={savingPlanMode}
+              onChange={setSavingPlanMode}
+            />
+
+            {savingPlanMode === 'rate' ? (
+              <>
+                <Text className="text-sm font-bold text-slate-500 mb-2">每月存收入百分比 (%)</Text>
+                <TextInput
+                  value={targetRate}
+                  onChangeText={setTargetRate}
+                  keyboardType="numeric"
+                  placeholder="20"
+                  className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-4"
+                />
+              </>
+            ) : (
+              <>
+                <Text className="text-sm font-bold text-slate-500 mb-2">每月固定存下 (RM)</Text>
+                <TextInput
+                  value={targetAmount}
+                  onChangeText={setTargetAmount}
+                  keyboardType="numeric"
+                  placeholder="300"
+                  className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-4"
+                />
+              </>
+            )}
+
+            <Text className="text-sm font-bold text-slate-500 mb-2">最低安全緩衝 (RM)</Text>
+            <TextInput
+              value={bufferAmount}
+              onChangeText={setBufferAmount}
+              keyboardType="numeric"
+              placeholder="300"
+              className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-4"
+            />
+
+            <View className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 mb-4">
+              <Text className="text-indigo-800 font-black mb-1">建議預設</Text>
+              <Text className="text-indigo-600 text-xs leading-5">
+                先用收入 20% 或 RM 300 起步。現金流穩定後，再把目標逐步提高。
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              onPress={handleSaveSavingPlan}
+              disabled={saveSavingPlan.isPending}
+              className="bg-indigo-600 rounded-2xl p-4 items-center"
+            >
+              <Text className="text-white font-black">
+                {saveSavingPlan.isPending ? '儲存中...' : '啟用存錢計劃'}
+              </Text>
+            </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
       </Modal>

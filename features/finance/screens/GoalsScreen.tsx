@@ -3,11 +3,29 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { EmptyState } from '@/features/finance/components/EmptyState';
+import { FilterBar } from '@/features/finance/components/FilterBar';
 import { SectionHeader } from '@/features/finance/components/SectionHeader';
 import { AlertConfig, CustomAlert } from '@/shared/ui/CustomAlert';
 import { useFinanceOverview } from '@/features/finance/hooks/useFinanceOverview';
-import { SavingsGoal } from '@/features/finance/types';
+import { SavingsGoal, SavingsGoalType } from '@/features/finance/types';
 import { formatMoney } from '@/features/finance/utils/finance';
+import { developerText } from '@/shared/config/appVariant';
+
+const GOAL_TYPE_OPTIONS = [
+  { label: '緊急金', value: 'emergency' },
+  { label: '旅行', value: 'travel' },
+  { label: '買車', value: 'car' },
+  { label: '還債', value: 'debt' },
+  { label: '其他', value: 'custom' },
+] as const;
+
+const GOAL_TYPE_LABELS: Record<SavingsGoalType, string> = {
+  emergency: '緊急預備金',
+  travel: '旅行基金',
+  car: '買車基金',
+  debt: '還債計劃',
+  custom: '自訂目標',
+};
 
 export default function GoalsScreen() {
   const { overview, financeData, saveGoal, removeGoal, isLoading } = useFinanceOverview();
@@ -18,6 +36,8 @@ export default function GoalsScreen() {
   const [targetAmount, setTargetAmount] = useState('');
   const [currentAmount, setCurrentAmount] = useState('');
   const [monthlyContribution, setMonthlyContribution] = useState('');
+  const [goalType, setGoalType] = useState<SavingsGoalType>('emergency');
+  const [isPrimary, setIsPrimary] = useState(false);
   const [targetDate, setTargetDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [alertConfig, setAlertConfig] = useState<AlertConfig>({ visible: false, title: '', message: '', type: 'info' });
@@ -28,6 +48,8 @@ export default function GoalsScreen() {
     setTargetAmount('');
     setCurrentAmount('');
     setMonthlyContribution('');
+    setGoalType('emergency');
+    setIsPrimary(false);
     setTargetDate(new Date());
   };
 
@@ -42,6 +64,8 @@ export default function GoalsScreen() {
     setTargetAmount(String(goal.target_amount));
     setCurrentAmount(String(goal.current_amount));
     setMonthlyContribution(String(goal.monthly_contribution ?? ''));
+    setGoalType(goal.goal_type ?? 'custom');
+    setIsPrimary(Boolean(goal.is_primary));
     setTargetDate(goal.target_date ? new Date(goal.target_date) : new Date());
     setModalVisible(true);
   };
@@ -59,6 +83,8 @@ export default function GoalsScreen() {
         target_amount: Number(targetAmount),
         current_amount: Number(currentAmount) || 0,
         monthly_contribution: Number(monthlyContribution) || 0,
+        goal_type: goalType,
+        is_primary: isPrimary,
         currency: 'MYR',
         target_date: targetDate.toISOString().split('T')[0],
       });
@@ -69,7 +95,9 @@ export default function GoalsScreen() {
       setAlertConfig({
         visible: true,
         title: '儲存失敗',
-        message: data?.source === 'legacy' ? '請先套用 v2 Supabase migration 後再新增目標。' : error instanceof Error ? error.message : '請稍後再試。',
+        message: data?.source === 'legacy'
+          ? developerText('請先套用 v2 Supabase migration 後再新增目標。', '存錢目標暫時無法使用，請稍後再試。')
+          : developerText(error instanceof Error ? error.message : '請稍後再試。', '存錢目標暫時無法儲存，請稍後再試。'),
         type: 'error',
       });
     }
@@ -133,6 +161,18 @@ export default function GoalsScreen() {
           <Text className="text-xs text-slate-400 mt-2">從收入交易中標記為儲蓄的金額。</Text>
         </View>
 
+        {overview.goals.length > 0 && (
+          <View className="bg-indigo-600 rounded-2xl p-5 mb-5">
+            <Text className="text-indigo-100 text-xs font-bold mb-1">主要存錢目標</Text>
+            <Text className="text-white text-2xl font-black">
+              {(overview.goals.find((goal) => goal.is_primary) ?? overview.goals[0]).name}
+            </Text>
+            <Text className="text-indigo-100 text-xs mt-2">
+              設為主要目標後，首頁會優先用它提醒你保留現金流。
+            </Text>
+          </View>
+        )}
+
         <SectionHeader title="儲蓄目標" />
         {overview.goals.length === 0 ? (
           <EmptyState title="尚未建立目標" message="例如緊急預備金、旅行基金、買房頭期款。" />
@@ -140,7 +180,12 @@ export default function GoalsScreen() {
           overview.goals.map((goal) => (
             <TouchableOpacity key={goal.id} onPress={() => openEditModal(goal)} className="bg-white border border-slate-100 rounded-2xl p-4 mb-3">
               <View className="flex-row justify-between items-center mb-2">
-                <Text className="font-black text-slate-800">{goal.name}</Text>
+                <View className="flex-1 pr-3">
+                  <Text className="font-black text-slate-800">{goal.name}</Text>
+                  <Text className="text-[11px] text-slate-400 mt-1">
+                    {GOAL_TYPE_LABELS[goal.goal_type ?? 'custom']}{goal.is_primary ? ' · 主要目標' : ''}
+                  </Text>
+                </View>
                 <Text className="font-black text-indigo-600">{Math.round(goal.progress * 100)}%</Text>
               </View>
               <View className="h-2 bg-slate-100 rounded-full overflow-hidden mb-2">
@@ -167,6 +212,8 @@ export default function GoalsScreen() {
             <Text className="text-xl font-black text-slate-900 mb-4">{editingGoal ? '編輯儲蓄目標' : '新增儲蓄目標'}</Text>
             <Text className="text-sm font-bold text-slate-500 mb-2">目標名稱</Text>
             <TextInput value={name} onChangeText={setName} placeholder="例如：緊急預備金" className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-4" />
+            <Text className="text-sm font-bold text-slate-500 mb-2">目標類型</Text>
+            <FilterBar options={[...GOAL_TYPE_OPTIONS]} value={goalType} onChange={setGoalType} />
             <Text className="text-sm font-bold text-slate-500 mb-2">目標金額</Text>
             <TextInput value={targetAmount} onChangeText={setTargetAmount} keyboardType="numeric" placeholder="0.00" className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-4" />
             <Text className="text-sm font-bold text-slate-500 mb-2">目前已存</Text>
@@ -188,6 +235,14 @@ export default function GoalsScreen() {
                 }}
               />
             )}
+            <TouchableOpacity
+              onPress={() => setIsPrimary((current) => !current)}
+              className={`border rounded-2xl p-4 mb-4 ${isPrimary ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-200'}`}
+            >
+              <Text className={`font-bold ${isPrimary ? 'text-indigo-700' : 'text-slate-600'}`}>
+                {isPrimary ? '已設為主要目標' : '設為主要目標'}
+              </Text>
+            </TouchableOpacity>
             <View className="flex-row gap-3">
               <TouchableOpacity onPress={() => setModalVisible(false)} className="flex-1 bg-slate-100 rounded-2xl p-4 items-center">
                 <Text className="font-black text-slate-600">取消</Text>

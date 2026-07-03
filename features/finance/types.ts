@@ -10,6 +10,8 @@ export type CategoryType = 'income' | 'expense';
 export type AccountType = 'cash' | 'bank' | 'ewallet' | 'credit_card';
 export type CurrencyCode = string;
 export type SpendingRulePeriod = 'day' | 'week' | 'month';
+export type SavingPlanMode = 'rate' | 'amount';
+export type SavingsGoalType = 'emergency' | 'travel' | 'car' | 'debt' | 'custom';
 
 export type Transaction = {
   id: number;
@@ -106,6 +108,8 @@ export type SavingsGoal = {
   currency: CurrencyCode;
   target_date?: string | null;
   monthly_contribution?: number | null;
+  goal_type?: SavingsGoalType;
+  is_primary?: boolean;
   icon?: string;
 };
 
@@ -137,6 +141,18 @@ export type SpendingRule = {
   category?: FinanceCategory | null;
 };
 
+export type SavingPlan = {
+  id: string;
+  user_id?: string;
+  mode: SavingPlanMode;
+  target_rate: number;
+  target_amount: number;
+  buffer_amount: number;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+};
+
 export type ExchangeRate = {
   id?: string;
   base_currency: CurrencyCode;
@@ -158,4 +174,5 @@ export type FinanceData = {
   goals: SavingsGoal[];
   recurringItems: RecurringItem[];
   spendingRules: SpendingRule[];
+  savingPlan: SavingPlan | null;
 };

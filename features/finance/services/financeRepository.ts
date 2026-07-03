@@ -16,6 +16,8 @@ import {
   FinanceCategory,
   FinanceData,
   RecurringItem,
+  SavingPlan,
+  SavingPlanMode,
   SavingsGoal,
   SpendingRule,
   SpendingRulePeriod,
@@ -39,6 +41,7 @@ export const financeQueryKeys = {
   goals: ['savings-goals'] as const,
   recurring: ['recurring-items'] as const,
   spendingRules: ['spending-rules'] as const,
+  savingPlan: ['saving-plan'] as const,
 };
 
 const DEFAULT_ACCOUNT: FinanceAccount = {
@@ -51,22 +54,53 @@ const DEFAULT_ACCOUNT: FinanceAccount = {
   icon: 'wallet',
 };
 
+const DEFAULT_FINANCE_CATEGORIES: Array<Pick<FinanceCategory, 'name' | 'icon' | 'type' | 'budget_limit'>> = [
+  { name: '薪水', icon: 'wallet', type: 'income', budget_limit: 0 },
+  { name: '副業', icon: 'monitor', type: 'income', budget_limit: 0 },
+  { name: '餐飲', icon: 'utensils', type: 'expense', budget_limit: 0 },
+  { name: '交通', icon: 'car', type: 'expense', budget_limit: 0 },
+  { name: '購物', icon: 'shopping', type: 'expense', budget_limit: 0 },
+  { name: '娛樂', icon: 'gamepad', type: 'expense', budget_limit: 0 },
+  { name: '健康', icon: 'heart', type: 'expense', budget_limit: 0 },
+  { name: '學習', icon: 'book', type: 'expense', budget_limit: 0 },
+  { name: '旅行', icon: 'plane', type: 'expense', budget_limit: 0 },
+  { name: '咖啡', icon: 'coffee', type: 'expense', budget_limit: 0 },
+];
+
 function isDefaultAccountId(accountId?: string | null) {
   return accountId === DEFAULT_ACCOUNT_ID;
 }
 
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (!error) return '';
+
+  if (typeof error === 'object') {
+    const record = error as Record<string, unknown>;
+    const parts = ['message', 'details', 'hint', 'code']
+      .map((key) => record[key])
+      .filter((value): value is string | number => typeof value === 'string' || typeof value === 'number')
+      .map(String)
+      .filter(Boolean);
+
+    if (parts.length > 0) return parts.join(' ');
+  }
+
+  return String(error);
+}
+
 function isMissingSchemaError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error ?? '');
+  const message = getErrorMessage(error).toLowerCase();
   return (
-    message.includes('relation') ||
-    message.includes('does not exist') ||
+    (message.includes('relation') && message.includes('does not exist')) ||
     message.includes('schema cache') ||
-    message.includes('Could not find the table')
+    message.includes('could not find the table') ||
+    message.includes('pgrst205')
   );
 }
 
 function toError(error: unknown) {
-  return error instanceof Error ? error : new Error(String(error));
+  return error instanceof Error ? error : new Error(getErrorMessage(error) || '發生未知資料錯誤');
 }
 
 export function mapLegacyCategory(category: Category): FinanceCategory {
@@ -155,13 +189,18 @@ async function getLegacyCategoriesSafely() {
 }
 
 async function getCurrentUserId() {
+  const user = await getCurrentUser();
+  return user.id;
+}
+
+async function getCurrentUser() {
   const {
     data: { user },
     error,
   } = await supabase.auth.getUser();
 
   if (error || !user) throw new Error('尚未登入，無法儲存資料');
-  return user.id;
+  return user;
 }
 
 async function ensureDefaultAccount(): Promise<FinanceAccount> {
@@ -171,19 +210,78 @@ async function ensureDefaultAccount(): Promise<FinanceAccount> {
     .select('*')
     .eq('user_id', user_id)
     .eq('name', DEFAULT_ACCOUNT.name)
+    .eq('is_archived', false)
     .maybeSingle();
 
   if (existingError && !isMissingSchemaError(existingError)) throw existingError;
   if (existing) return existing as FinanceAccount;
 
+  const payload = {
+    user_id,
+    name: DEFAULT_ACCOUNT.name,
+    type: DEFAULT_ACCOUNT.type,
+    currency: DEFAULT_ACCOUNT.currency,
+    initial_balance: DEFAULT_ACCOUNT.initial_balance,
+    icon: DEFAULT_ACCOUNT.icon,
+  };
+
   const { data, error } = await supabase
     .from('accounts')
-    .insert([{ ...DEFAULT_ACCOUNT, id: undefined, user_id }])
+    .insert([payload])
     .select()
     .single();
 
   if (error) throw error;
   return data as FinanceAccount;
+}
+
+async function ensureDefaultCategories(
+  existingCategories: FinanceCategory[],
+  user: Awaited<ReturnType<typeof getCurrentUser>>,
+): Promise<FinanceCategory[]> {
+  const seeded = Boolean(user.user_metadata?.finance_default_categories_seeded);
+  if (seeded) return existingCategories;
+
+  if (existingCategories.length > 0) {
+    await supabase.auth.updateUser({
+      data: {
+        ...user.user_metadata,
+        finance_default_categories_seeded: true,
+      },
+    });
+    return existingCategories;
+  }
+
+  const categoryKey = (category: Pick<FinanceCategory, 'name' | 'type'>) =>
+    `${category.type}:${category.name.trim().toLowerCase()}`;
+  const existingKeys = new Set(existingCategories.map(categoryKey));
+  const missingCategories = DEFAULT_FINANCE_CATEGORIES.filter((category) => !existingKeys.has(categoryKey(category)));
+
+  if (missingCategories.length === 0) return existingCategories;
+
+  const rows = missingCategories.map((category) => ({
+    user_id: user.id,
+    name: category.name,
+    icon: category.icon,
+    type: category.type,
+    budget_limit: category.budget_limit ?? 0,
+  }));
+
+  const { data, error } = await supabase
+    .from('finance_categories')
+    .insert(rows)
+    .select();
+
+  if (error) throw error;
+  await supabase.auth.updateUser({
+    data: {
+      ...user.user_metadata,
+      finance_default_categories_seeded: true,
+    },
+  });
+  return [...existingCategories, ...((data ?? []) as FinanceCategory[])].sort((left, right) =>
+    left.name.localeCompare(right.name, 'zh-Hant'),
+  );
 }
 
 async function ensureLegacyCategoryMapping(
@@ -319,7 +417,10 @@ export async function getCategories(): Promise<Category[]> {
 }
 
 export async function getLegacyFinanceData(): Promise<FinanceData> {
-  const [transactions, categories] = await Promise.all([getTransactions(), getCategories()]);
+  const [transactions, categories] = await Promise.all([
+    getLegacyTransactionsSafely(),
+    getLegacyCategoriesSafely(),
+  ]);
   const financeCategories = categories.map(mapLegacyCategory);
   const entries = transactions.map(mapLegacyTransaction);
   const budgets = financeCategories
@@ -336,6 +437,7 @@ export async function getLegacyFinanceData(): Promise<FinanceData> {
     goals: [],
     recurringItems: [],
     spendingRules: [],
+    savingPlan: null,
   };
 }
 
@@ -362,6 +464,7 @@ export async function getFinanceData(): Promise<FinanceData> {
 
     if (error) throw error;
 
+    const user = await getCurrentUser();
     let allAccounts = (accountsResult.data ?? []) as FinanceAccount[];
     let accounts = allAccounts.filter((account) => !account.is_archived);
     if (accounts.length === 0) {
@@ -373,19 +476,12 @@ export async function getFinanceData(): Promise<FinanceData> {
       ];
     }
     let categories = (categoriesResult.data ?? []) as FinanceCategory[];
-    let entries = attachRelations(
+    categories = await ensureDefaultCategories(categories, user);
+    const entries = attachRelations(
       (entriesResult.data ?? []) as TransactionEntry[],
       allAccounts,
       categories,
     );
-    const migrated = await migrateLegacyTransactionsToV2({ accounts, categories, entries });
-    accounts = migrated.accounts;
-    allAccounts = [
-      ...allAccounts.filter((account) => !accounts.some((activeAccount) => activeAccount.id === account.id)),
-      ...accounts,
-    ];
-    categories = migrated.categories;
-    entries = attachRelations(migrated.entries, allAccounts, categories);
     const budgets = ((budgetsResult.data ?? []) as FinanceBudget[]).map((budget) => ({
       ...budget,
       category: categories.find((category) => category.id === budget.category_id) ?? null,
@@ -396,6 +492,7 @@ export async function getFinanceData(): Promise<FinanceData> {
       account: allAccounts.find((account) => account.id === item.account_id) ?? null,
     }));
     const spendingRules = await getSpendingRulesSafely(categories);
+    const savingPlan = await getSavingPlanSafely();
 
     return {
       source: 'v2',
@@ -407,9 +504,14 @@ export async function getFinanceData(): Promise<FinanceData> {
       goals: (goalsResult.data ?? []) as SavingsGoal[],
       recurringItems,
       spendingRules,
+      savingPlan,
     };
   } catch (error) {
-    if (isMissingSchemaError(error)) return getLegacyFinanceData();
+    if (isMissingSchemaError(error)) {
+      throw new Error(
+        'Finance database schema is not ready. Apply supabase/migrations/202607010001_finance_baseline.sql to create the v2 tables.',
+      );
+    }
     throw toError(error);
   }
 }
@@ -490,10 +592,11 @@ export type UpsertAccountInput = {
 
 export async function upsertAccount(input: UpsertAccountInput) {
   const user_id = await getCurrentUserId();
-  const payload = { ...input, user_id };
+  const { id, ...fields } = input;
+  const payload = { ...fields, user_id };
   const query = supabase.from('accounts');
-  const { data, error } = input.id
-    ? await query.update(payload).eq('id', input.id).select().single()
+  const { data, error } = id
+    ? await query.update(payload).eq('id', id).select().single()
     : await query.insert([payload]).select().single();
 
   if (error) throw error;
@@ -516,12 +619,13 @@ export type UpsertFinanceCategoryInput = {
 
 export async function upsertFinanceCategory(input: UpsertFinanceCategoryInput) {
   const user_id = await getCurrentUserId();
-  const payload = { ...input, user_id };
+  const { id, ...fields } = input;
+  const payload = { ...fields, user_id };
   const query = supabase.from('finance_categories');
 
   try {
-    const { data, error } = input.id
-      ? await query.update(payload).eq('id', input.id).select().single()
+    const { data, error } = id
+      ? await query.update(payload).eq('id', id).select().single()
       : await query.insert([payload]).select().single();
 
     if (error) throw error;
@@ -553,7 +657,12 @@ export async function deleteFinanceCategory(category: FinanceCategory) {
     return removeCategory(category.legacy_category_id);
   }
 
-  const { error } = await supabase.from('finance_categories').delete().eq('id', category.id);
+  const user_id = await getCurrentUserId();
+  const { error } = await supabase
+    .from('finance_categories')
+    .delete()
+    .eq('id', category.id)
+    .eq('user_id', user_id);
   if (error) throw error;
 }
 
@@ -575,13 +684,14 @@ export async function upsertTransactionEntry(input: UpsertEntryInput) {
   const conversion = await convertToBaseCurrency(input.amount, input.currency, BASE_CURRENCY);
   const account_id = isDefaultAccountId(input.account_id) ? null : input.account_id;
   const to_account_id = isDefaultAccountId(input.to_account_id) ? null : input.to_account_id;
+  const { id, ...fields } = input;
 
   if (input.type === 'transfer' && (!account_id || !to_account_id)) {
     throw new Error('請先建立兩個真實帳戶，再新增轉帳紀錄。');
   }
 
   const payload = {
-    ...input,
+    ...fields,
     account_id,
     to_account_id,
     user_id,
@@ -592,8 +702,8 @@ export async function upsertTransactionEntry(input: UpsertEntryInput) {
 
   try {
     const query = supabase.from('transaction_entries');
-    const { data, error } = input.id
-      ? await query.update(payload).eq('id', input.id).select().single()
+    const { data, error } = id
+      ? await query.update(payload).eq('id', id).select().single()
       : await query.insert([payload]).select().single();
 
     if (error) throw error;
@@ -608,9 +718,9 @@ export async function upsertTransactionEntry(input: UpsertEntryInput) {
       ? Number(input.category_id.replace('legacy-', ''))
       : undefined;
 
-    if (input.id?.startsWith('legacy-')) {
+    if (id?.startsWith('legacy-')) {
       return editTransaction({
-        id: Number(input.id.replace('legacy-', '')),
+        id: Number(id.replace('legacy-', '')),
         amount: input.amount,
         note: input.note,
         date: input.date,
@@ -634,7 +744,12 @@ export async function deleteTransactionEntry(entry: TransactionEntry) {
     return removeTransaction(entry.legacy_transaction_id);
   }
 
-  const { error } = await supabase.from('transaction_entries').delete().eq('id', entry.id);
+  const user_id = await getCurrentUserId();
+  const { error } = await supabase
+    .from('transaction_entries')
+    .delete()
+    .eq('id', entry.id)
+    .eq('user_id', user_id);
   if (error) throw error;
 }
 
@@ -662,10 +777,18 @@ export async function deleteBudget(id: string) {
 
 export async function upsertSavingsGoal(input: Partial<SavingsGoal> & { name: string }) {
   const user_id = await getCurrentUserId();
-  const payload = { currency: BASE_CURRENCY, current_amount: 0, target_amount: 0, ...input, user_id };
+  const { id, ...fields } = input;
+  const payload = { currency: BASE_CURRENCY, current_amount: 0, target_amount: 0, ...fields, user_id };
   const query = supabase.from('savings_goals');
-  const { data, error } = input.id
-    ? await query.update(payload).eq('id', input.id).select().single()
+  if (fields.is_primary) {
+    const { error: primaryError } = await supabase
+      .from('savings_goals')
+      .update({ is_primary: false })
+      .eq('user_id', user_id);
+    if (primaryError && !isMissingSchemaError(primaryError)) throw primaryError;
+  }
+  const { data, error } = id
+    ? await query.update(payload).eq('id', id).select().single()
     : await query.insert([payload]).select().single();
 
   if (error) throw error;
@@ -679,10 +802,11 @@ export async function deleteSavingsGoal(id: string) {
 
 export async function upsertRecurringItem(input: Partial<RecurringItem> & { name: string }) {
   const user_id = await getCurrentUserId();
-  const payload = { currency: BASE_CURRENCY, frequency: 'monthly', is_active: true, ...input, user_id };
+  const { id, ...fields } = input;
+  const payload = { currency: BASE_CURRENCY, frequency: 'monthly', is_active: true, ...fields, user_id };
   const query = supabase.from('recurring_items');
-  const { data, error } = input.id
-    ? await query.update(payload).eq('id', input.id).select().single()
+  const { data, error } = id
+    ? await query.update(payload).eq('id', id).select().single()
     : await query.insert([payload]).select().single();
 
   if (error) throw error;
@@ -710,6 +834,46 @@ async function getSpendingRulesSafely(categories: FinanceCategory[]): Promise<Sp
   }
 }
 
+async function getSavingPlanSafely(): Promise<SavingPlan | null> {
+  try {
+    const user_id = await getCurrentUserId();
+    const { data, error } = await supabase
+      .from('saving_plans')
+      .select('*')
+      .eq('user_id', user_id)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (error) throw error;
+    return (data as SavingPlan | null) ?? null;
+  } catch (error) {
+    if (isMissingSchemaError(error)) return null;
+    throw error;
+  }
+}
+
+export type UpsertSavingPlanInput = {
+  id?: string;
+  mode: SavingPlanMode;
+  target_rate: number;
+  target_amount: number;
+  buffer_amount: number;
+  is_active?: boolean;
+};
+
+export async function upsertSavingPlan(input: UpsertSavingPlanInput) {
+  const user_id = await getCurrentUserId();
+  const { id, ...fields } = input;
+  const payload = { is_active: true, ...fields, user_id };
+  const query = supabase.from('saving_plans');
+  const { data, error } = id
+    ? await query.update(payload).eq('id', id).eq('user_id', user_id).select().single()
+    : await query.upsert([payload], { onConflict: 'user_id' }).select().single();
+
+  if (error) throw error;
+  return data as SavingPlan;
+}
+
 export type UpsertSpendingRuleInput = {
   id?: string;
   name: string;
@@ -721,10 +885,11 @@ export type UpsertSpendingRuleInput = {
 
 export async function upsertSpendingRule(input: UpsertSpendingRuleInput) {
   const user_id = await getCurrentUserId();
-  const payload = { is_active: true, ...input, user_id };
+  const { id, ...fields } = input;
+  const payload = { is_active: true, ...fields, user_id };
   const query = supabase.from('spending_rules');
-  const { data, error } = input.id
-    ? await query.update(payload).eq('id', input.id).select().single()
+  const { data, error } = id
+    ? await query.update(payload).eq('id', id).select().single()
     : await query.insert([payload]).select().single();
 
   if (error) throw error;

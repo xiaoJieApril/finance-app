@@ -9,6 +9,7 @@ import {
   FinanceBudget,
   FinanceCategory,
   RecurringItem,
+  SavingPlan,
   SavingsGoal,
   SpendingRule,
   TransactionEntry,
@@ -263,6 +264,132 @@ export function calculateSafeToSpend(startingBalance: number, recurringItems: Re
     safetyBuffer,
     days,
   };
+}
+
+function daysRemainingInMonth(date = new Date()) {
+  const end = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+  return Math.max(end.getDate() - date.getDate() + 1, 1);
+}
+
+function daysRemainingInWeek(date = new Date()) {
+  return Math.max(7 - date.getDay(), 1);
+}
+
+export function calculateMonthlySavingPlan(params: {
+  cashFlow: { income: number; expense: number; balance: number };
+  goals: ReturnType<typeof calculateGoalProgress>;
+  recurringItems: RecurringItem[];
+  savingPlan?: SavingPlan | null;
+  date?: Date;
+}) {
+  const { cashFlow, goals, recurringItems, savingPlan, date = new Date() } = params;
+  const remainingRecurring = getRemainingMonthRecurringItems(recurringItems, date);
+  const remainingFixedIncome = remainingRecurring
+    .filter((item) => item.type === 'income')
+    .reduce((sum, item) => sum + item.amount, 0);
+  const remainingFixedExpense = remainingRecurring
+    .filter((item) => item.type === 'expense')
+    .reduce((sum, item) => sum + item.amount, 0);
+  const projectedIncome = cashFlow.income > 0 ? cashFlow.income + remainingFixedIncome : remainingFixedIncome;
+  const plannedGoalContribution = goals.reduce((sum, goal) => sum + (goal.monthly_contribution ?? 0), 0);
+  const targetRate = savingPlan?.target_rate ?? 0.2;
+  const targetAmount =
+    savingPlan?.mode === 'amount'
+      ? savingPlan.target_amount
+      : projectedIncome > 0
+        ? projectedIncome * targetRate
+        : savingPlan?.target_amount ?? 300;
+  const requiredSavings = Math.max(targetAmount, plannedGoalContribution);
+  const markedSavings = Math.max(
+    cashFlow.income -
+      cashFlow.expense -
+      Math.max(cashFlow.balance - requiredSavings, 0),
+    0,
+  );
+  const availableAfterCommitments = Math.max(
+    cashFlow.income + remainingFixedIncome - cashFlow.expense - remainingFixedExpense - requiredSavings,
+    0,
+  );
+  const shortfall = Math.max(requiredSavings - Math.max(cashFlow.balance, 0), 0);
+
+  return {
+    targetRate,
+    targetAmount,
+    requiredSavings,
+    markedSavings: Math.min(markedSavings, requiredSavings),
+    shortfall,
+    remainingFixedIncome,
+    remainingFixedExpense,
+    availableAfterCommitments,
+    estimated: cashFlow.income <= 0,
+  };
+}
+
+export function calculateSpendAllowance(params: {
+  netWorth: number;
+  cashFlow: { income: number; expense: number; balance: number };
+  recurringItems: RecurringItem[];
+  savingPlanResult: ReturnType<typeof calculateMonthlySavingPlan>;
+  bufferAmount?: number;
+  date?: Date;
+}) {
+  const { netWorth, recurringItems, savingPlanResult, bufferAmount = 300, date = new Date() } = params;
+  const remainingRecurring = getRemainingMonthRecurringItems(recurringItems, date);
+  const remainingFixedIncome = remainingRecurring
+    .filter((item) => item.type === 'income')
+    .reduce((sum, item) => sum + item.amount, 0);
+  const remainingFixedExpense = remainingRecurring
+    .filter((item) => item.type === 'expense')
+    .reduce((sum, item) => sum + item.amount, 0);
+  const monthlyRemaining = Math.max(
+    netWorth + remainingFixedIncome - remainingFixedExpense - savingPlanResult.requiredSavings - bufferAmount,
+    0,
+  );
+  const dailyAllowance = monthlyRemaining / daysRemainingInMonth(date);
+  const weeklyAllowance = Math.min(monthlyRemaining, dailyAllowance * daysRemainingInWeek(date));
+  const status = monthlyRemaining <= 0 ? 'danger' : dailyAllowance < 20 ? 'tight' : 'safe';
+
+  return {
+    dailyAllowance,
+    weeklyAllowance,
+    monthlyRemaining,
+    bufferAmount,
+    status,
+  };
+}
+
+export function generateSavingCoachSignals(params: {
+  allowance: ReturnType<typeof calculateSpendAllowance>;
+  savingPlanResult: ReturnType<typeof calculateMonthlySavingPlan>;
+  budgets: ReturnType<typeof calculateBudgetUsage>;
+}) {
+  const { allowance, savingPlanResult, budgets } = params;
+  const signals: { tone: 'safe' | 'tight' | 'danger'; text: string }[] = [];
+
+  if (allowance.status === 'danger') {
+    signals.push({ tone: 'danger', text: '今天先停手。固定支出和本月應存金額扣除後，已沒有安全可花空間。' });
+  } else if (allowance.status === 'tight') {
+    signals.push({ tone: 'tight', text: `今天建議控制在 ${formatMoney(allowance.dailyAllowance)} 內，避免壓到本月存錢目標。` });
+  } else {
+    signals.push({ tone: 'safe', text: `今天可花約 ${formatMoney(allowance.dailyAllowance)}，本週上限約 ${formatMoney(allowance.weeklyAllowance)}。` });
+  }
+
+  if (savingPlanResult.shortfall > 0) {
+    signals.push({ tone: 'tight', text: `本月存錢目標還差 ${formatMoney(savingPlanResult.shortfall)}。先砍彈性支出，不需要責怪自己。` });
+  }
+
+  budgets
+    .filter((budget) => budget.usage >= 0.8)
+    .sort((a, b) => b.usage - a.usage)
+    .slice(0, 1)
+    .forEach((budget) => {
+      signals.push({
+        tone: budget.usage >= 1 ? 'danger' : 'tight',
+        text: `${budget.category?.name ?? '某個類別'}已用 ${Math.round(budget.usage * 100)}%，接下來先減少這類支出。`,
+      });
+    });
+
+  return signals.slice(0, 3);
 }
 
 function startOfRulePeriod(period: SpendingRule['period'], date = new Date()) {

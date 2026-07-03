@@ -1,92 +1,72 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  createCategory,
-  createTransaction,
-  editCategory,
-  editTransaction,
-  financeQueryKeys,
-  getCategories,
-  getTransactions,
-  removeCategory,
-  removeTransaction,
-} from '@/features/finance/services/financeRepository';
+import { useMemo } from 'react';
 import { Category, Transaction } from '@/features/finance/types';
+import { entryBaseAmount } from '@/features/finance/utils/finance';
+import { useFinanceData } from './useFinanceData';
 
-const invalidateTransactions = (queryClient: ReturnType<typeof useQueryClient>) => {
-  queryClient.invalidateQueries({ queryKey: financeQueryKeys.transactions });
-};
+function stableNumberId(value: string | undefined, fallback: number) {
+  if (!value) return fallback;
+  const legacyNumber = Number(value.replace('legacy-', ''));
+  if (Number.isFinite(legacyNumber)) return legacyNumber;
 
-const invalidateCategories = (queryClient: ReturnType<typeof useQueryClient>) => {
-  queryClient.invalidateQueries({ queryKey: financeQueryKeys.categories });
-};
+  return Array.from(value).reduce((hash, char) => (hash * 31 + char.charCodeAt(0)) >>> 0, 0);
+}
 
 export const useTransactions = () => {
-  const queryClient = useQueryClient();
+  const finance = useFinanceData();
+  const { data, isLoading, error, refetch } = finance.financeData;
 
-  const fetchTransactions = useQuery({
-    queryKey: financeQueryKeys.transactions,
-    queryFn: getTransactions,
-  });
+  const categories = useMemo<Category[]>(
+    () =>
+      data?.categories.map((category, index) => ({
+        id: category.legacy_category_id ?? stableNumberId(category.id, index),
+        name: category.name,
+        icon: category.icon,
+        type: category.type,
+        budget_limit: category.budget_limit,
+      })) ?? [],
+    [data?.categories],
+  );
 
-  const fetchCategories = useQuery({
-    queryKey: financeQueryKeys.categories,
-    queryFn: getCategories,
-  });
+  const categoryById = useMemo(
+    () => new Map(data?.categories.map((category, index) => [category.id, categories[index]]) ?? []),
+    [categories, data?.categories],
+  );
 
-  const addCategory = useMutation({
-    mutationFn: (newCategory: Partial<Category>) => createCategory(newCategory),
-    onSuccess: () => {
-      invalidateCategories(queryClient);
+  const transactions = useMemo<Transaction[]>(
+    () =>
+      data?.entries.map((entry, index) => {
+        const category = entry.category_id ? categoryById.get(entry.category_id) : undefined;
+
+        return {
+          id: entry.legacy_transaction_id ?? stableNumberId(entry.id, index),
+          user_id: entry.user_id,
+          category_id: category?.id,
+          amount: entryBaseAmount(entry) || entry.amount,
+          note: entry.note,
+          date: entry.date,
+          category,
+          is_savings: entry.is_savings,
+        };
+      }) ?? [],
+    [categoryById, data?.entries],
+  );
+
+  const unsupportedMutation = {
+    mutate: () => undefined,
+    mutateAsync: async () => {
+      throw new Error('Legacy transaction mutations are no longer supported. Use v2 finance mutations instead.');
     },
-  });
-
-  const updateCategory = useMutation({
-    mutationFn: (updatedCategory: Partial<Category> & { id: number }) =>
-      editCategory(updatedCategory),
-    onSuccess: () => {
-      invalidateCategories(queryClient);
-      invalidateTransactions(queryClient);
-    },
-  });
-
-  const deleteCategory = useMutation({
-    mutationFn: (id: number) => removeCategory(id),
-    onSuccess: () => {
-      invalidateCategories(queryClient);
-      invalidateTransactions(queryClient);
-    },
-  });
-
-  const addTransaction = useMutation({
-    mutationFn: (newTransaction: Partial<Transaction>) => createTransaction(newTransaction),
-    onSuccess: () => {
-      invalidateTransactions(queryClient);
-    },
-  });
-
-  const deleteTransaction = useMutation({
-    mutationFn: (id: number) => removeTransaction(id),
-    onSuccess: () => {
-      invalidateTransactions(queryClient);
-    },
-  });
-
-  const updateTransaction = useMutation({
-    mutationFn: (updatedTransaction: Partial<Transaction> & { id: number }) =>
-      editTransaction(updatedTransaction),
-    onSuccess: () => {
-      invalidateTransactions(queryClient);
-    },
-  });
+    isPending: false,
+  };
 
   return {
-    fetchTransactions,
-    fetchCategories,
-    addCategory,
-    addTransaction,
-    deleteTransaction,
-    updateTransaction,
-    updateCategory,
-    deleteCategory,
+    fetchTransactions: { data: transactions, isLoading, error, refetch },
+    fetchCategories: { data: categories, isLoading, error, refetch },
+    addCategory: unsupportedMutation,
+    addTransaction: unsupportedMutation,
+    deleteTransaction: unsupportedMutation,
+    updateTransaction: unsupportedMutation,
+    updateCategory: unsupportedMutation,
+    deleteCategory: unsupportedMutation,
   };
 };

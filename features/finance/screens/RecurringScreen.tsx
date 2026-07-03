@@ -10,6 +10,7 @@ import { AlertConfig, CustomAlert } from '@/shared/ui/CustomAlert';
 import { useFinanceOverview } from '@/features/finance/hooks/useFinanceOverview';
 import { CategoryType, CurrencyCode, RecurringItem } from '@/features/finance/types';
 import { formatMoney } from '@/features/finance/utils/finance';
+import { developerText } from '@/shared/config/appVariant';
 
 /**
  * Recurring income and bill management route.
@@ -114,7 +115,9 @@ export default function RecurringScreen() {
       setAlertConfig({
         visible: true,
         title: '儲存失敗',
-        message: data?.source === 'legacy' ? '請先套用 v2 Supabase migration 後再新增固定項目。' : error instanceof Error ? error.message : '請稍後再試。',
+        message: data?.source === 'legacy'
+          ? developerText('請先套用 v2 Supabase migration 後再新增固定項目。', '固定收入與帳單暫時無法使用，請稍後再試。')
+          : developerText(error instanceof Error ? error.message : '請稍後再試。', '固定項目暫時無法儲存，請稍後再試。'),
         type: 'error',
       });
     }

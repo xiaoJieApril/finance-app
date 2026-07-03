@@ -13,7 +13,10 @@ import {
   calculateCashFlow,
   calculateFinancialHealth,
   calculateGoalProgress,
+  calculateMonthlySavingPlan,
+  calculateSpendAllowance,
   getUpcomingRecurringItems,
+  generateSavingCoachSignals,
 } from '@/features/finance/utils/finance';
 import { useFinanceData } from './useFinanceData';
 
@@ -39,6 +42,24 @@ export function useFinanceOverview() {
     const upcomingRecurringItems = getUpcomingRecurringItems(data.recurringItems);
     const totalNetWorth = accounts.reduce((sum, account) => sum + (account.current_balance ?? 0), 0);
     const forecast = calculateCashFlowForecast(totalNetWorth, data.recurringItems);
+    const savingPlan = calculateMonthlySavingPlan({
+      cashFlow,
+      goals,
+      recurringItems: data.recurringItems,
+      savingPlan: data.savingPlan,
+    });
+    const spendAllowance = calculateSpendAllowance({
+      netWorth: totalNetWorth,
+      cashFlow,
+      recurringItems: data.recurringItems,
+      savingPlanResult: savingPlan,
+      bufferAmount: data.savingPlan?.buffer_amount,
+    });
+    const savingCoachSignals = generateSavingCoachSignals({
+      allowance: spendAllowance,
+      savingPlanResult: savingPlan,
+      budgets,
+    });
     const health = calculateFinancialHealth({
       income: cashFlow.income,
       expense: cashFlow.expense,
@@ -61,6 +82,9 @@ export function useFinanceOverview() {
       totalNetWorth,
       forecast,
       health,
+      savingPlan,
+      spendAllowance,
+      savingCoachSignals,
     };
   }, [data]);
 

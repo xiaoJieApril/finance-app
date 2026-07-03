@@ -54,7 +54,19 @@ type FinanceContextInput = {
     currentAmount: number;
     monthlyContribution?: number | null;
     progressPercent: number;
+    isPrimary?: boolean;
   }[];
+  savingPlan: {
+    targetAmount: number;
+    targetRatePercent: number;
+    requiredSavings: number;
+    shortfall: number;
+    dailyAllowance: number;
+    weeklyAllowance: number;
+    monthlyRemainingAllowance: number;
+    status: string;
+    estimated: boolean;
+  };
   spendingRules: {
     name: string;
     category: string;
@@ -106,7 +118,21 @@ type OverviewSnapshot = {
     current_amount: number;
     monthly_contribution?: number | null;
     progress: number;
+    is_primary?: boolean;
   }[];
+  savingPlan: {
+    targetAmount: number;
+    targetRate: number;
+    requiredSavings: number;
+    shortfall: number;
+    estimated: boolean;
+  };
+  spendAllowance: {
+    dailyAllowance: number;
+    weeklyAllowance: number;
+    monthlyRemaining: number;
+    status: string;
+  };
   totalBudget: number;
   totalBudgetSpent: number;
   budgetUsage: number;
@@ -211,7 +237,19 @@ export function buildFinanceContext(params: {
       currentAmount: goal.current_amount,
       monthlyContribution: goal.monthly_contribution,
       progressPercent: goal.progress * 100,
+      isPrimary: goal.is_primary,
     })),
+    savingPlan: {
+      targetAmount: overview.savingPlan.targetAmount,
+      targetRatePercent: overview.savingPlan.targetRate * 100,
+      requiredSavings: overview.savingPlan.requiredSavings,
+      shortfall: overview.savingPlan.shortfall,
+      dailyAllowance: overview.spendAllowance.dailyAllowance,
+      weeklyAllowance: overview.spendAllowance.weeklyAllowance,
+      monthlyRemainingAllowance: overview.spendAllowance.monthlyRemaining,
+      status: overview.spendAllowance.status,
+      estimated: overview.savingPlan.estimated,
+    },
     spendingRules: data.spendingRules.map((rule) => ({
       name: rule.name,
       category: rule.category?.name ?? '全部支出',
@@ -233,7 +271,7 @@ export function buildFinanceContext(params: {
     transactions: toTransactionContext(data.entries, period),
     planningSafety: {
       readOnly: true,
-      note: 'AI may propose budget changes, but the app must not apply them automatically.',
+      note: 'AI may propose saving plan, budget, and spending rule changes. The app applies them only after explicit user confirmation.',
     },
   };
 
@@ -269,5 +307,5 @@ export function getRecapPrompt(period: ReviewPeriod): string {
 }
 
 export function getPlannerPrompt(): string {
-  return '請根據以上 JSON 數據，產出下個月的月度預算規劃方案。只提出建議，不要自動修改任何資料。';
+  return '請根據以上 JSON 數據，產出下個月的月度預算與存錢方案。請包含 savingPlanRecommendation、applyableBudgetChanges、expectedMonthlySavings；只提出建議，不要自動修改任何資料。';
 }

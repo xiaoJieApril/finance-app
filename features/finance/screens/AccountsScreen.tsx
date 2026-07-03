@@ -10,6 +10,7 @@ import { AlertConfig, CustomAlert } from '@/shared/ui/CustomAlert';
 import { useFinanceOverview } from '@/features/finance/hooks/useFinanceOverview';
 import { AccountType, CurrencyCode, FinanceAccount } from '@/features/finance/types';
 import { formatMoney } from '@/features/finance/utils/finance';
+import { developerText } from '@/shared/config/appVariant';
 
 const ACCOUNT_TYPES = [
   { label: '現金', value: 'cash' },
@@ -90,7 +91,9 @@ export default function AccountsScreen() {
       setAlertConfig({
         visible: true,
         title: '儲存失敗',
-        message: data?.source === 'legacy' ? '請先套用 v2 Supabase migration 後再新增帳戶。' : error instanceof Error ? error.message : '請稍後再試。',
+        message: data?.source === 'legacy'
+          ? developerText('請先套用 v2 Supabase migration 後再新增帳戶。', '帳戶功能暫時無法使用，請稍後再試。')
+          : developerText(error instanceof Error ? error.message : '請稍後再試。', '帳戶暫時無法儲存，請稍後再試。'),
         type: 'error',
       });
     }

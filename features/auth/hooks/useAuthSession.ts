@@ -31,5 +31,10 @@ export function useAuthSession() {
     };
   }, []);
 
-  return { session, isInitialized };
+  return {
+    session,
+    user: session?.user ?? null,
+    isAnonymous: Boolean(session?.user?.is_anonymous),
+    isInitialized,
+  };
 }

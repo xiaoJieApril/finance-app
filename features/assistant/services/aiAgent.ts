@@ -55,6 +55,20 @@ export type BudgetPlanningReport = {
     expectedSavingsRatePercent?: number;
     summary: string;
   };
+  savingPlanRecommendation?: {
+    mode: 'rate' | 'amount';
+    targetRatePercent?: number;
+    targetAmount: number;
+    bufferAmount: number;
+    reason: string;
+  };
+  expectedMonthlySavings?: number;
+  applyableBudgetChanges?: {
+    category: string;
+    recommendedBudget: number;
+    rulePeriod?: 'day' | 'week' | 'month';
+    ruleLimitAmount?: number;
+  }[];
   scenarioPlans?: {
     name: '保守' | '平衡' | '積極儲蓄' | string;
     recommendedTotalBudget: number;
@@ -148,6 +162,8 @@ const SYSTEM_PROMPT = `你是一位專業的個人財務分析、復盤與預算
 - 需要提供保守、平衡、積極儲蓄三種 monthly budget scenario
 - 可參考 spendingRules、信用卡 outstandingBalance/minimumPayment、目標 monthlyContribution
 - 每個類別建議都要附上 reason
+- 若有 savingPlan，必須評估每日可花額是否合理
+- 需要輸出 savingPlanRecommendation、expectedMonthlySavings、applyableBudgetChanges，讓 app 可在用戶確認後套用
 
 ## 回覆要求（Response Requirements）
 
@@ -203,6 +219,17 @@ const SYSTEM_PROMPT = `你是一位專業的個人財務分析、復盤與預算
     "expectedSavingsRatePercent": 30,
     "summary": "下個月建議把總支出控制在 RM2100，優先壓低餐飲與娛樂。"
   },
+  "savingPlanRecommendation": {
+    "mode": "rate",
+    "targetRatePercent": 30,
+    "targetAmount": 900,
+    "bufferAmount": 300,
+    "reason": "以目前收入與固定帳單計算，30% 儲蓄率仍保留基本生活彈性。"
+  },
+  "expectedMonthlySavings": 900,
+  "applyableBudgetChanges": [
+    { "category": "餐飲", "recommendedBudget": 700, "rulePeriod": "week", "ruleLimitAmount": 180 }
+  ],
   "scenarioPlans": [
     {
       "name": "保守",

@@ -1,9 +1,10 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
-import { Bell, CalendarClock, ChevronRight, Code2, Database, Shield, Sparkles, WalletCards } from 'lucide-react-native';
+import { Bell, CalendarClock, ChevronRight, Code2, Database, LayoutGrid, Shield, Sparkles, UserPlus, WalletCards, X } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   Switch,
@@ -12,7 +13,9 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AuthPanel } from '@/features/auth/components/AuthPanel';
 import { useAuth } from '@/features/auth/hooks/useAuth';
+import { useAuthSession } from '@/features/auth/hooks/useAuthSession';
 import { AlertConfig, CustomAlert } from '@/shared/ui/CustomAlert';
 import { CustomButton } from '@/shared/ui/CustomButton';
 import { useNotificationSettings } from '@/shared/hooks/useNotificationSettings';
@@ -36,12 +39,14 @@ function DiagnosticRow({ label, value, tone = 'neutral' }: { label: string; valu
 export default function ProfileScreen() {
   const router = useRouter();
   const { signOut, isLoading: isSignOutLoading } = useAuth();
+  const { isAnonymous, user } = useAuthSession();
   const { settings, updateSettings } = useNotificationSettings();
   const { financeData } = useFinanceOverview();
   const dataSource = financeData.data?.source ?? (financeData.isLoading ? 'loading' : 'unknown');
   const isAiConfigured = Boolean(process.env.EXPO_PUBLIC_GEMINI_API_KEY);
 
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const [upgradeModalVisible, setUpgradeModalVisible] = useState(false);
   const [alertConfig, setAlertConfig] = useState<AlertConfig>({
     visible: false,
     title: '',
@@ -76,6 +81,26 @@ export default function ProfileScreen() {
           <Text className="text-3xl font-extrabold text-slate-900 tracking-tight mb-8">
             個人設定
           </Text>
+
+          {isAnonymous && (
+            <TouchableOpacity
+              onPress={() => setUpgradeModalVisible(true)}
+              className="bg-indigo-600 rounded-2xl p-4 mb-4 shadow-sm"
+            >
+              <View className="flex-row items-center">
+                <View className="w-10 h-10 bg-white/15 rounded-full items-center justify-center mr-4">
+                  <UserPlus color="white" size={20} />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-white font-black text-lg">註冊正式帳號</Text>
+                  <Text className="text-indigo-100 text-xs mt-0.5">
+                    保留目前訪客資料，綁定 Email 和密碼。
+                  </Text>
+                </View>
+                <ChevronRight color="#c7d2fe" size={20} />
+              </View>
+            </TouchableOpacity>
+          )}
 
           {showDeveloperTools && (
             <View className="bg-slate-900 rounded-2xl mb-4 shadow-sm overflow-hidden">
@@ -200,6 +225,20 @@ export default function ProfileScreen() {
             <ChevronRight color="#cbd5e1" size={20} />
           </TouchableOpacity>
 
+          <TouchableOpacity
+            onPress={() => router.push('../categories')}
+            className="flex-row items-center bg-white p-4 rounded-2xl mb-4 shadow-sm border border-slate-100"
+          >
+            <View className="w-10 h-10 bg-violet-50 rounded-full items-center justify-center mr-4">
+              <LayoutGrid color="#7c3aed" size={20} />
+            </View>
+            <View className="flex-1">
+              <Text className="text-slate-800 font-bold text-lg">類別管理</Text>
+              <Text className="text-slate-400 text-xs mt-0.5">新增、編輯或刪除收入與支出類別</Text>
+            </View>
+            <ChevronRight color="#cbd5e1" size={20} />
+          </TouchableOpacity>
+
           <View className="flex-row items-center bg-white p-4 rounded-2xl mb-4 shadow-sm border border-slate-100">
             <View className="w-10 h-10 bg-emerald-50 rounded-full items-center justify-center mr-4">
               <Shield color="#059669" size={20} />
@@ -231,13 +270,33 @@ export default function ProfileScreen() {
           )}
 
           <CustomButton
-            title="登出帳號"
+            title={user ? '登出帳號' : '尚未登入'}
             variant="secondary"
             onPress={signOut}
-            disabled={isSignOutLoading}
+            disabled={isSignOutLoading || !user}
           />
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal visible={upgradeModalVisible} transparent animationType="slide" onRequestClose={() => setUpgradeModalVisible(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1 justify-end bg-black/40">
+          <View className="px-5 pb-5">
+            <View className="items-end mb-3">
+              <TouchableOpacity
+                onPress={() => setUpgradeModalVisible(false)}
+                className="w-10 h-10 rounded-full bg-white items-center justify-center"
+              >
+                <X size={20} color="#475569" />
+              </TouchableOpacity>
+            </View>
+            <AuthPanel
+              initialMode="upgradeGuest"
+              showGuestAction={false}
+              onSuccess={() => setUpgradeModalVisible(false)}
+            />
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       <CustomAlert config={alertConfig} hideAlert={hideAlert} />
     </SafeAreaView>
