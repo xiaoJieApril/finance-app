@@ -4,13 +4,13 @@
 
 Location: `features/finance/screens/OverviewScreen.tsx`, `features/finance/hooks/useFinanceOverview.ts`, `features/finance/utils/finance.ts`
 
-Shows monthly income, expenses, balance, net worth, budget usage, health score, saving-plan progress, daily/weekly/monthly safe-to-spend allowance, cashflow timeline, scenario simulator, upcoming recurring items, and quick transaction actions.
+Shows monthly income, expenses, balance, net worth, budget pressure points, health score, saving-plan progress, daily/weekly/monthly safe-to-spend allowance, cashflow timeline, scenario simulator, upcoming recurring items, and quick transaction actions.
 
 ## Saving Coach
 
 Location: `features/finance/screens/OverviewScreen.tsx`, `features/finance/hooks/useFinanceOverview.ts`, `features/finance/utils/finance.ts`
 
-Saving plans define a monthly target by income rate or fixed amount plus a safety buffer. The overview turns this into a daily, weekly, and monthly spending allowance, then shows strict-but-non-shaming coach signals such as when to pause discretionary spending or protect the monthly savings target.
+Saving plans define a monthly target by income rate or fixed amount plus a safety buffer. The overview turns this into a daily, weekly, and monthly spending allowance, then shows strict-but-non-shaming daily actions such as when to pause discretionary spending, which category to control first, and how much remains before the monthly savings target is protected. Developer builds can show the calculation inputs behind the allowance.
 
 ## Ledger
 
@@ -22,7 +22,7 @@ Supports searching, filtering, editing, and deleting transaction entries. Transa
 
 Location: `features/finance/screens/BudgetScreen.tsx`, `features/finance/screens/CategoriesScreen.tsx`, `features/finance/types.ts`
 
-Categories classify income and expense entries. Budgets attach monthly spending limits to expense categories and power risk reminders.
+Categories classify income and expense entries. Budgets attach monthly spending limits to expense categories and power risk reminders. The budget screen also shows the top spend pressure points and a weekly control view so users can react before the end of the month.
 
 Spending rules are stricter user-defined limits such as daily food caps or weekly entertainment caps. They are stored separately from budgets so they can warn about short-period behavior without changing the monthly budget source of truth.
 
@@ -38,7 +38,7 @@ Credit-card accounts can also store statement day, payment due day, minimum paym
 
 Location: `features/finance/screens/GoalsScreen.tsx`
 
-Tracks savings target amount, current progress, target date, goal type, primary-goal status, and planned monthly contribution. Goal cards estimate the number of months needed to finish based on the current contribution pace.
+Tracks savings target amount, current progress, target date, goal type, primary-goal status, and planned monthly contribution. Goal cards estimate the number of months needed to finish, the monthly amount needed to hit the target date, and the extra monthly savings required if the current pace is too slow.
 
 ## Recurring Bills
 
@@ -53,10 +53,10 @@ Location: `features/assistant/screens/AIAgentScreen.tsx`, `features/assistant/`
 Builds finance context and sends it to the AI assistant service. The assistant has two modes:
 
 - Finance review: weekly or monthly recap reports with insights and action items.
-- Budget planner: monthly budget and saving-plan recommendations using cashflow, existing budgets, accounts, goals, recurring items, spending rules, credit-card debt fields, and recent spending.
+- Budget planner: monthly budget and saving-plan recommendations using cashflow, existing budgets, accounts, goals, recurring items, spending rules, pressure points, saving-coach actions, credit-card debt fields, and recent spending.
 - Budget scenarios: conservative, balanced, and aggressive-saving plans with category-level reasons and current-vs-suggested comparisons.
 
-Planner output is advisory by default. The user can explicitly confirm "apply this plan" to write recommended saving plans, category budgets, and optional spending rules.
+The AI screen presents user-readable question cards while sending more precise internal prompts to Gemini. Planner output is advisory by default. The user can explicitly confirm "apply this plan" to write recommended saving plans, category budgets, and optional spending rules.
 
 ## Bill Calendar, Safe-To-Spend, And Simulator
 

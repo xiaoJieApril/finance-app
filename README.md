@@ -4,14 +4,14 @@ finaTracker is a React Native finance app built with Expo Router. It focuses on 
 
 ## Core Features
 
-- Cashflow overview: monthly income, expense, balance, net worth, budget risk, saving-plan progress, daily/weekly/monthly safe-to-spend allowance, timeline, and upcoming recurring items.
-- Saving coach: monthly saving targets, safety buffer, spend allowance, and strict-but-non-shaming action signals.
+- Cashflow overview: monthly income, expense, balance, net worth, budget pressure points, saving-plan progress, daily/weekly/monthly safe-to-spend allowance, timeline, and upcoming recurring items.
+- Saving coach: monthly saving targets, safety buffer, spend allowance, pressure points, and strict-but-non-shaming daily action signals.
 - Ledger: create, edit, delete, search, and filter transaction records.
 - Budgets and categories: manage spending categories, income categories, monthly limits, and user-defined spending rules.
 - Accounts: track cash, banks, e-wallets, and credit cards while preserving historical transaction context. Credit cards can store statement day, due day, minimum payment, outstanding balance, interest rate, and credit limit.
-- Goals: track savings targets, goal type, primary-goal status, progress, monthly contribution plans, and projected completion pace.
+- Goals: track savings targets, goal type, primary-goal status, progress, monthly contribution plans, projected completion pace, and extra monthly savings needed to hit target dates.
 - Recurring bills: manage fixed income and expenses with local reminder support.
-- AI review and planning: summarize weekly/monthly finance context, propose monthly saving/budget plans, and apply confirmed recommendations to budgets, spending rules, and saving plans.
+- AI review and planning: user-readable question cards summarize weekly/monthly finance context, propose monthly saving/budget plans, and apply confirmed recommendations to budgets, spending rules, and saving plans.
 - Reports: export transaction summaries to CSV or PDF.
 - Scenario simulator: test a possible future income or expense against current cashflow before committing.
 

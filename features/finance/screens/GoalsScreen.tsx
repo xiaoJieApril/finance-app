@@ -9,7 +9,7 @@ import { AlertConfig, CustomAlert } from '@/shared/ui/CustomAlert';
 import { useFinanceOverview } from '@/features/finance/hooks/useFinanceOverview';
 import { SavingsGoal, SavingsGoalType } from '@/features/finance/types';
 import { formatMoney } from '@/features/finance/utils/finance';
-import { developerText } from '@/shared/config/appVariant';
+import { developerText, showDeveloperTools } from '@/shared/config/appVariant';
 
 const GOAL_TYPE_OPTIONS = [
   { label: '緊急金', value: 'emergency' },
@@ -141,6 +141,7 @@ export default function GoalsScreen() {
   const savingsIncome = data.entries
     .filter((entry) => entry.type === 'income' && entry.is_savings)
     .reduce((sum, entry) => sum + (entry.base_currency_amount ?? 0), 0);
+  const primaryProjection = overview.goalProjection.find((goal) => goal.is_primary) ?? overview.goalProjection[0];
 
   return (
     <SafeAreaView className="flex-1 bg-slate-50">
@@ -161,14 +162,19 @@ export default function GoalsScreen() {
           <Text className="text-xs text-slate-400 mt-2">從收入交易中標記為儲蓄的金額。</Text>
         </View>
 
-        {overview.goals.length > 0 && (
+        {primaryProjection && (
           <View className="bg-indigo-600 rounded-2xl p-5 mb-5">
             <Text className="text-indigo-100 text-xs font-bold mb-1">主要存錢目標</Text>
-            <Text className="text-white text-2xl font-black">
-              {(overview.goals.find((goal) => goal.is_primary) ?? overview.goals[0]).name}
+            <Text className="text-white text-2xl font-black">{primaryProjection.name}</Text>
+            <Text className="text-indigo-100 text-xs mt-2">
+              {primaryProjection.projectedMonths
+                ? `照目前速度約 ${primaryProjection.projectedMonths} 個月完成。`
+                : '先設定每月投入，才能估算完成速度。'}
             </Text>
             <Text className="text-indigo-100 text-xs mt-2">
-              設為主要目標後，首頁會優先用它提醒你保留現金流。
+              {primaryProjection.extraMonthlyNeeded && primaryProjection.extraMonthlyNeeded > 0
+                ? `若要按目標日期完成，每月還要多存 ${formatMoney(primaryProjection.extraMonthlyNeeded)}。`
+                : '目前投入節奏沒有明顯缺口。'}
             </Text>
           </View>
         )}
@@ -177,7 +183,7 @@ export default function GoalsScreen() {
         {overview.goals.length === 0 ? (
           <EmptyState title="尚未建立目標" message="例如緊急預備金、旅行基金、買房頭期款。" />
         ) : (
-          overview.goals.map((goal) => (
+          overview.goalProjection.map((goal) => (
             <TouchableOpacity key={goal.id} onPress={() => openEditModal(goal)} className="bg-white border border-slate-100 rounded-2xl p-4 mb-3">
               <View className="flex-row justify-between items-center mb-2">
                 <View className="flex-1 pr-3">
@@ -201,6 +207,25 @@ export default function GoalsScreen() {
                 每月投入 {formatMoney(goal.monthly_contribution ?? 0)}
                 {goal.projectedMonths ? ` · 約 ${goal.projectedMonths} 個月完成` : ' · 尚未設定完成速度'}
               </Text>
+              {goal.requiredMonthlyToHitTarget != null && (
+                <Text className="text-xs text-slate-500 mt-1">
+                  目標日期所需每月 {formatMoney(goal.requiredMonthlyToHitTarget)}
+                  {goal.extraMonthlyNeeded && goal.extraMonthlyNeeded > 0
+                    ? ` · 還要多存 ${formatMoney(goal.extraMonthlyNeeded)}`
+                    : ' · 節奏足夠'}
+                </Text>
+              )}
+              {showDeveloperTools && (
+                <View className="bg-slate-50 rounded-xl p-3 mt-3">
+                  <Text className="text-[11px] font-black text-slate-500">Developer calculation</Text>
+                  <Text className="text-[11px] text-slate-500 mt-1 leading-5">
+                    monthly={formatMoney(goal.calculationSource.monthlyContribution)};
+                    sharedBoost={formatMoney(goal.calculationSource.sharedSavingsBoost)};
+                    markedSavings={formatMoney(goal.calculationSource.markedSavings)};
+                    remaining={formatMoney(goal.calculationSource.remainingAmount)}
+                  </Text>
+                </View>
+              )}
             </TouchableOpacity>
           ))
         )}

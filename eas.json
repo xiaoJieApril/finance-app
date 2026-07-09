@@ -22,7 +22,11 @@
       "env": {
         "EXPO_PUBLIC_APP_VARIANT": "developer",
         "EXPO_PUBLIC_ENABLE_DEVELOPER_TOOLS": "true",
-        "EXPO_PUBLIC_BUILD_CHANNEL": "preview"
+        "EXPO_PUBLIC_BUILD_CHANNEL": "preview",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://qwfsgwqaicftfauwerew.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_ASSUqJfL7lQxW-xK4iUnXA_mVuZYNMd",
+        "EXPO_PUBLIC_GEMINI_API_KEY": "AIzaSyBz8UyAJr6iQlWV8kNb2RYnuHHex590fYE",
+        "EXPO_PUBLIC_ENABLE_NOTIFICATION_IMPORTS": "true"
       }
     },
     "production": {

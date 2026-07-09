@@ -20,6 +20,7 @@ import {
   buildFinanceContext,
   getPlannerPrompt,
   getRecapPrompt,
+  PromptCardConfig,
   PLANNER_PROMPTS,
   RECAP_PROMPTS,
   ReviewPeriod,
@@ -56,24 +57,25 @@ export default function AIAgentScreen() {
       : null;
 
   const handleSend = useCallback(
-    async (text?: string) => {
-      const userText = (text ?? input).trim();
-      if (!userText || isLoading) return;
+    async (text?: string | { visibleText: string; internalPrompt: string }) => {
+      const userVisibleText = typeof text === 'object' ? text.visibleText.trim() : (text ?? input).trim();
+      const internalPrompt = typeof text === 'object' ? text.internalPrompt.trim() : userVisibleText;
+      if (!userVisibleText || !internalPrompt || isLoading) return;
       if (!financeContext) {
-        setError('財務資料尚未載入完成，請稍後再試。');
+        setError('財務資料尚未載入完成。你可以先新增收入、支出、預算或存錢目標，再回來問我。');
         return;
       }
 
       setInput('');
       setError(null);
 
-      const userMsg: ChatMessage = { id: generateId(), role: 'user', content: userText };
+      const userMsg: ChatMessage = { id: generateId(), role: 'user', content: userVisibleText };
       setMessages((prev) => [...prev, userMsg]);
       setIsLoading(true);
 
       try {
         const reply = await sendChatMessage({
-          userMessage: userText,
+          userMessage: internalPrompt,
           financeContext,
           history: messages,
           mode,
@@ -92,8 +94,19 @@ export default function AIAgentScreen() {
     [input, isLoading, financeContext, messages, mode, period],
   );
 
-  const handleQuickRecap = () => handleSend(getRecapPrompt(period));
-  const handleQuickPlanner = () => handleSend(getPlannerPrompt());
+  const handleQuickRecap = () =>
+    handleSend({
+      visibleText: period === 'week' ? '幫我生成本週完整復盤' : '幫我生成本月完整復盤',
+      internalPrompt: getRecapPrompt(period),
+    });
+  const handleQuickPlanner = () =>
+    handleSend({
+      visibleText: '幫我做下月存錢方案',
+      internalPrompt: getPlannerPrompt(),
+    });
+  const handlePromptCard = (prompt: PromptCardConfig) => {
+    handleSend({ visibleText: prompt.userVisibleText, internalPrompt: prompt.internalPrompt });
+  };
 
   const handleClear = () => {
     setMessages([]);
@@ -136,7 +149,7 @@ export default function AIAgentScreen() {
   };
 
   const showSuggestions = messages.length === 0 && !isLoading;
-  const prompts = mode === 'planner' ? PLANNER_PROMPTS : RECAP_PROMPTS[period];
+  const prompts: PromptCardConfig[] = mode === 'planner' ? PLANNER_PROMPTS : RECAP_PROMPTS[period];
   const isPlanner = mode === 'planner';
 
   return (
@@ -213,8 +226,8 @@ export default function AIAgentScreen() {
               </View>
               <Text className="text-indigo-200 text-sm leading-5 mb-4">
                 {isPlanner
-                  ? '我會根據你的收支、現有預算、帳戶、儲蓄目標與固定帳單，提出下個月預算方案。建議只供參考，不會自動修改資料。'
-                  : `我已讀取你${period === 'week' ? '近 7 天' : '本月'}的收支數據，點擊下方按鈕即可生成完整復盤報告。`}
+                  ? '我會讀取你的現金流、預算、壓力類別和存錢目標，給你下個月怎麼存更多的方案。'
+                  : `我會讀取你${period === 'week' ? '近 7 天' : '本月'}的收支、預算和存錢進度，先指出風險，再給下一步行動。`}
               </Text>
               <TouchableOpacity
                 onPress={isPlanner ? handleQuickPlanner : handleQuickRecap}
@@ -223,19 +236,20 @@ export default function AIAgentScreen() {
               >
                 {isPlanner ? <PiggyBank size={18} color="#4f46e5" /> : <Calendar size={18} color="#4f46e5" />}
                 <Text className="text-indigo-600 font-bold">
-                  {isPlanner ? '生成月度預算方案' : period === 'week' ? '生成本週復盤報告' : '生成本月復盤報告'}
+                  {isPlanner ? '一鍵生成下月存錢方案' : period === 'week' ? '一鍵生成本週復盤' : '一鍵生成本月復盤'}
                 </Text>
               </TouchableOpacity>
             </View>
 
-            <View className="px-4 mt-4 flex-row flex-wrap gap-2">
+            <View className="px-4 mt-4 gap-3">
               {prompts.map((prompt) => (
                 <TouchableOpacity
-                  key={prompt}
-                  onPress={() => handleSend(prompt)}
-                  className="bg-white border border-indigo-100 px-4 py-2.5 rounded-full"
+                  key={prompt.id}
+                  onPress={() => handlePromptCard(prompt)}
+                  className="bg-white border border-indigo-100 rounded-2xl p-4 active:bg-indigo-50"
                 >
-                  <Text className="text-indigo-600 text-sm font-medium">{prompt}</Text>
+                  <Text className="text-indigo-700 text-base font-black">{prompt.label}</Text>
+                  <Text className="text-slate-500 text-xs leading-5 mt-1">{prompt.description}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -256,7 +270,10 @@ export default function AIAgentScreen() {
                   <Bot size={16} color="#4f46e5" />
                 </View>
                 <View className="bg-white border border-slate-100 px-4 py-3 rounded-2xl rounded-bl-sm">
-                  <ActivityIndicator size="small" color="#4f46e5" />
+                  <View className="flex-row items-center gap-2">
+                    <ActivityIndicator size="small" color="#4f46e5" />
+                    <Text className="text-slate-500 text-sm">正在讀取你的現金流、預算和存錢目標...</Text>
+                  </View>
                 </View>
               </View>
             ) : null
@@ -275,7 +292,7 @@ export default function AIAgentScreen() {
         >
           <TextInput
             className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-slate-800 text-[15px] max-h-28"
-            placeholder={isPlanner ? '追問預算規劃...' : '追問復盤細節...'}
+            placeholder={isPlanner ? '問我：我要多存 RM300 怎麼調？' : '問我：今天還能花多少？'}
             placeholderTextColor="#94a3b8"
             value={input}
             onChangeText={setInput}

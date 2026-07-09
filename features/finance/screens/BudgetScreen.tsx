@@ -10,7 +10,7 @@ import { AlertConfig, CustomAlert } from '@/shared/ui/CustomAlert';
 import { useFinanceOverview } from '@/features/finance/hooks/useFinanceOverview';
 import { FinanceBudget, FinanceCategory, SpendingRule, SpendingRulePeriod } from '@/features/finance/types';
 import { evaluateSpendingRules, formatMoney } from '@/features/finance/utils/finance';
-import { developerText } from '@/shared/config/appVariant';
+import { developerText, showDeveloperTools } from '@/shared/config/appVariant';
 
 export default function BudgetScreen() {
   const router = useRouter();
@@ -229,6 +229,7 @@ export default function BudgetScreen() {
 
   const overBudget = overview.budgets.filter((budget) => budget.spent > budget.monthly_limit);
   const nearLimit = overview.budgets.filter((budget) => budget.usage >= 0.8 && budget.spent <= budget.monthly_limit);
+  const weeklyPressure = overview.pressurePoints.filter((point) => point.weeklySpent > 0);
 
   return (
     <SafeAreaView className="flex-1 bg-slate-50">
@@ -285,6 +286,70 @@ export default function BudgetScreen() {
             <Text className="text-2xl font-black text-indigo-600">{Math.round(overview.budgetUsage * 100)}%</Text>
           </View>
         </View>
+
+        <SectionHeader title="削減優先級" />
+        {overview.pressurePoints.length === 0 ? (
+          <EmptyState title="暫無壓力點" message="設定預算或支出規則後，我會指出最該削減的前三類。" />
+        ) : (
+          <View className="mb-5">
+            {overview.pressurePoints.map((point, index) => (
+              <View key={point.categoryId} className="bg-white border border-slate-100 rounded-2xl p-4 mb-3">
+                <View className="flex-row items-start justify-between">
+                  <View className="flex-1 pr-3">
+                    <Text className="text-[11px] font-black text-slate-400 mb-1">#{index + 1} 先削這類</Text>
+                    <Text className="font-black text-slate-800">{point.category?.name ?? '未分類'}</Text>
+                    <Text className="text-xs text-slate-500 mt-1">{point.reason}</Text>
+                  </View>
+                  <Text className={`font-black ${point.tone === 'danger' ? 'text-rose-600' : point.tone === 'tight' ? 'text-amber-600' : 'text-emerald-600'}`}>
+                    {Math.round(point.score * 100)}%
+                  </Text>
+                </View>
+                <View className="flex-row gap-2 mt-3">
+                  <View className="flex-1 bg-slate-50 rounded-xl p-3">
+                    <Text className="text-[11px] text-slate-400 font-bold">本週已花</Text>
+                    <Text className="font-black text-slate-800 mt-1">{formatMoney(point.weeklySpent)}</Text>
+                  </View>
+                  <View className="flex-1 bg-slate-50 rounded-xl p-3">
+                    <Text className="text-[11px] text-slate-400 font-bold">本月剩餘</Text>
+                    <Text className="font-black text-slate-800 mt-1">{formatMoney(point.remaining)}</Text>
+                  </View>
+                </View>
+                {showDeveloperTools && (
+                  <Text className="text-[11px] text-slate-400 mt-3">
+                    monthlyUsage={Math.round(point.monthlyUsage * 100)}%; weeklyUsage={Math.round(point.weeklyUsage * 100)}%; ruleUsage={point.rule ? Math.round(point.rule.usage * 100) : 'none'}%
+                  </Text>
+                )}
+              </View>
+            ))}
+          </View>
+        )}
+
+        <SectionHeader title="本週控支" />
+        {weeklyPressure.length === 0 ? (
+          <EmptyState title="本週還沒有明顯支出" message="新增流水後，這裡會用週視角提醒你哪一類正在跑太快。" />
+        ) : (
+          <View className="mb-5">
+            {weeklyPressure.map((point) => (
+              <View key={`week-${point.categoryId}`} className="bg-white border border-slate-100 rounded-2xl p-4 mb-3">
+                <View className="flex-row justify-between mb-2">
+                  <Text className="font-black text-slate-800">{point.category?.name ?? '未分類'}</Text>
+                  <Text className={point.weeklyUsage >= 1 ? 'font-black text-rose-600' : point.weeklyUsage >= 0.8 ? 'font-black text-amber-600' : 'font-black text-emerald-600'}>
+                    {Math.round(point.weeklyUsage * 100)}%
+                  </Text>
+                </View>
+                <View className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <View
+                    className={point.weeklyUsage >= 1 ? 'h-full bg-rose-500' : point.weeklyUsage >= 0.8 ? 'h-full bg-amber-500' : 'h-full bg-emerald-500'}
+                    style={{ width: `${Math.min(point.weeklyUsage * 100, 100)}%` }}
+                  />
+                </View>
+                <Text className="text-xs text-slate-400 mt-2">
+                  本週 {formatMoney(point.weeklySpent)} / 合理週額 {formatMoney(point.weeklyTarget)}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
 
         <SectionHeader title="風險提醒" />
         {overBudget.length === 0 && nearLimit.length === 0 ? (

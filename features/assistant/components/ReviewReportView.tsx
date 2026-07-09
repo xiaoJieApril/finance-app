@@ -113,8 +113,17 @@ export function ReviewReportView({ report }: Props) {
 
       {actionItems && actionItems.length > 0 && (
         <>
-          <SectionTitle icon={<Lightbulb size={14} color="#4f46e5" />} title="行動建議" />
-          <BulletList items={actionItems} color="text-indigo-700" />
+          <SectionTitle icon={<Lightbulb size={14} color="#4f46e5" />} title="下一步待辦" />
+          <View className="gap-2">
+            {actionItems.map((item, index) => (
+              <View key={`${item}-${index}`} className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 flex-row">
+                <View className="w-6 h-6 rounded-full bg-indigo-600 items-center justify-center mr-3">
+                  <Text className="text-white text-xs font-black">{index + 1}</Text>
+                </View>
+                <Text className="flex-1 text-indigo-800 text-[14px] leading-5">{item}</Text>
+              </View>
+            ))}
+          </View>
         </>
       )}
 

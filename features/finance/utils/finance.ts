@@ -16,6 +16,8 @@ import {
 } from '@/features/finance/types';
 import { isSameMonth } from './date';
 
+type SavingCoachTone = 'safe' | 'tight' | 'danger';
+
 export function entryBaseAmount(entry: TransactionEntry) {
   return entry.base_currency_amount ?? 0;
 }
@@ -266,13 +268,30 @@ export function calculateSafeToSpend(startingBalance: number, recurringItems: Re
   };
 }
 
-function daysRemainingInMonth(date = new Date()) {
+export function daysRemainingInMonth(date = new Date()) {
   const end = new Date(date.getFullYear(), date.getMonth() + 1, 0);
   return Math.max(end.getDate() - date.getDate() + 1, 1);
 }
 
-function daysRemainingInWeek(date = new Date()) {
+export function daysRemainingInWeek(date = new Date()) {
   return Math.max(7 - date.getDay(), 1);
+}
+
+function startOfWeek(date = new Date()) {
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - start.getDay());
+  return start;
+}
+
+function getWeekEntries(entries: TransactionEntry[], date = new Date()) {
+  const start = startOfWeek(date);
+  const end = new Date(date);
+  end.setHours(23, 59, 59, 999);
+  return entries.filter((entry) => {
+    const entryDate = new Date(entry.date);
+    return entryDate >= start && entryDate <= end;
+  });
 }
 
 export function calculateMonthlySavingPlan(params: {
@@ -345,17 +364,163 @@ export function calculateSpendAllowance(params: {
     netWorth + remainingFixedIncome - remainingFixedExpense - savingPlanResult.requiredSavings - bufferAmount,
     0,
   );
-  const dailyAllowance = monthlyRemaining / daysRemainingInMonth(date);
-  const weeklyAllowance = Math.min(monthlyRemaining, dailyAllowance * daysRemainingInWeek(date));
-  const status = monthlyRemaining <= 0 ? 'danger' : dailyAllowance < 20 ? 'tight' : 'safe';
+  const monthDaysLeft = daysRemainingInMonth(date);
+  const weekDaysLeft = daysRemainingInWeek(date);
+  const dailyAllowance = monthlyRemaining / monthDaysLeft;
+  const weeklyAllowance = Math.min(monthlyRemaining, dailyAllowance * weekDaysLeft);
+  const status: SavingCoachTone = monthlyRemaining <= 0 ? 'danger' : dailyAllowance < 20 ? 'tight' : 'safe';
 
   return {
     dailyAllowance,
     weeklyAllowance,
     monthlyRemaining,
     bufferAmount,
+    remainingFixedIncome,
+    remainingFixedExpense,
+    daysRemainingInMonth: monthDaysLeft,
+    daysRemainingInWeek: weekDaysLeft,
     status,
   };
+}
+
+export function calculateGoalCompletionProjection(params: {
+  goals: ReturnType<typeof calculateGoalProgress>;
+  savingPlanResult: ReturnType<typeof calculateMonthlySavingPlan>;
+  date?: Date;
+}) {
+  const { goals, savingPlanResult, date = new Date() } = params;
+  const availableSavings = Math.max(savingPlanResult.markedSavings, 0);
+  const activeGoals = goals.length || availableSavings <= 0 ? goals : goals;
+  const sharedSavingsBoost = activeGoals.length > 0 ? availableSavings / activeGoals.length : 0;
+
+  return activeGoals.map((goal) => {
+    const monthlyContribution = goal.monthly_contribution ?? 0;
+    const effectiveMonthlyContribution = monthlyContribution + sharedSavingsBoost;
+    const projectedMonths = effectiveMonthlyContribution > 0
+      ? Math.ceil(goal.remaining / effectiveMonthlyContribution)
+      : null;
+    const targetDate = goal.target_date ? new Date(goal.target_date) : null;
+    const monthsToTarget = targetDate
+      ? Math.max(
+          (targetDate.getFullYear() - date.getFullYear()) * 12 +
+            targetDate.getMonth() -
+            date.getMonth() +
+            (targetDate.getDate() >= date.getDate() ? 1 : 0),
+          1,
+        )
+      : null;
+    const requiredMonthlyToHitTarget = monthsToTarget ? goal.remaining / monthsToTarget : null;
+    const extraMonthlyNeeded = requiredMonthlyToHitTarget != null
+      ? Math.max(requiredMonthlyToHitTarget - monthlyContribution, 0)
+      : null;
+
+    return {
+      ...goal,
+      effectiveMonthlyContribution,
+      projectedMonths,
+      monthsToTarget,
+      requiredMonthlyToHitTarget,
+      extraMonthlyNeeded,
+      calculationSource: {
+        monthlyContribution,
+        sharedSavingsBoost,
+        markedSavings: savingPlanResult.markedSavings,
+        remainingAmount: goal.remaining,
+      },
+    };
+  });
+}
+
+export function calculateSpendPressurePoints(params: {
+  budgets: ReturnType<typeof calculateBudgetUsage>;
+  spendingRules: SpendingRule[];
+  entries: TransactionEntry[];
+  date?: Date;
+}) {
+  const { budgets, spendingRules, entries, date = new Date() } = params;
+  const weekExpenseEntries = getWeekEntries(entries, date).filter((entry) => entry.type === 'expense');
+  const ruleStatuses = evaluateSpendingRules(spendingRules, entries, date);
+
+  return budgets
+    .map((budget) => {
+      const categoryRules = ruleStatuses.filter((rule) => rule.category_id === budget.category_id);
+      const strongestRule = categoryRules.sort((a, b) => b.usage - a.usage)[0] ?? null;
+      const weeklySpent = weekExpenseEntries
+        .filter((entry) => entry.category_id === budget.category_id)
+        .reduce((sum, entry) => sum + entryBaseAmount(entry), 0);
+      const weeklyBudgetTarget = budget.monthly_limit > 0 ? budget.monthly_limit / 4.3 : 0;
+      const weeklyUsage = weeklyBudgetTarget > 0 ? weeklySpent / weeklyBudgetTarget : 0;
+      const score = Math.max(budget.usage, strongestRule?.usage ?? 0, weeklyUsage);
+      const tone: SavingCoachTone = score >= 1 ? 'danger' : score >= 0.8 ? 'tight' : 'safe';
+      const remaining = Math.min(budget.remaining, strongestRule?.remaining ?? budget.remaining);
+      const reason = strongestRule && strongestRule.usage >= budget.usage
+        ? `${strongestRule.period === 'day' ? '每日' : strongestRule.period === 'week' ? '每週' : '每月'}規則已用 ${Math.round(strongestRule.usage * 100)}%`
+        : weeklyUsage > budget.usage
+          ? `本週已用 ${Math.round(weeklyUsage * 100)}% 的合理週額`
+          : `本月預算已用 ${Math.round(budget.usage * 100)}%`;
+
+      return {
+        category: budget.category,
+        categoryId: budget.category_id,
+        monthlySpent: budget.spent,
+        monthlyLimit: budget.monthly_limit,
+        monthlyUsage: budget.usage,
+        weeklySpent,
+        weeklyTarget: weeklyBudgetTarget,
+        weeklyUsage,
+        rule: strongestRule,
+        remaining,
+        score,
+        tone,
+        reason,
+      };
+    })
+    .filter((point) => point.score >= 0.5 || point.weeklySpent > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+}
+
+export function generateDailySavingActions(params: {
+  allowance: ReturnType<typeof calculateSpendAllowance>;
+  savingPlanResult: ReturnType<typeof calculateMonthlySavingPlan>;
+  pressurePoints: ReturnType<typeof calculateSpendPressurePoints>;
+}) {
+  const { allowance, savingPlanResult, pressurePoints } = params;
+  const actions: { tone: SavingCoachTone; title: string; text: string }[] = [];
+
+  if (allowance.status === 'danger') {
+    actions.push({
+      tone: 'danger',
+      title: '今天先停手',
+      text: '固定支出、緩衝和本月應存扣完後，已沒有安全可花空間。只保留必要支出。',
+    });
+  } else {
+    actions.push({
+      tone: allowance.status,
+      title: allowance.status === 'tight' ? '今天按上限走' : '今天可正常花',
+      text: `今天控制在 ${formatMoney(allowance.dailyAllowance)} 內，本週最多 ${formatMoney(allowance.weeklyAllowance)}。`,
+    });
+  }
+
+  const topPressure = pressurePoints[0];
+  if (topPressure) {
+    const categoryName = topPressure.category?.name ?? '高壓類別';
+    actions.push({
+      tone: topPressure.tone,
+      title: `先管住${categoryName}`,
+      text: `${topPressure.reason}，本月剩 ${formatMoney(topPressure.remaining)}。今天能不花就先不花。`,
+    });
+  }
+
+  if (savingPlanResult.shortfall > 0) {
+    actions.push({
+      tone: 'tight',
+      title: '補回存錢缺口',
+      text: `本月還差 ${formatMoney(savingPlanResult.shortfall)} 才達標。先從非必要支出砍，不需要責怪自己。`,
+    });
+  }
+
+  return actions.slice(0, 3);
 }
 
 export function generateSavingCoachSignals(params: {

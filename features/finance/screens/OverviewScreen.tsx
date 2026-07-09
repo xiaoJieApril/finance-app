@@ -17,7 +17,6 @@ import {
 import { AuthPanel } from '@/features/auth/components/AuthPanel';
 import { useAuthSession } from '@/features/auth/hooks/useAuthSession';
 import { AccountBalanceCard } from '@/features/finance/components/AccountBalanceCard';
-import { BudgetProgressRow } from '@/features/finance/components/BudgetProgressRow';
 import { EmptyState } from '@/features/finance/components/EmptyState';
 import { FilterBar } from '@/features/finance/components/FilterBar';
 import { SectionHeader } from '@/features/finance/components/SectionHeader';
@@ -26,7 +25,7 @@ import { TransactionRow } from '@/features/finance/components/TransactionRow';
 import { CustomAlert, AlertConfig } from '@/shared/ui/CustomAlert';
 import { useFinanceOverview } from '@/features/finance/hooks/useFinanceOverview';
 import { CurrencyCode, TransactionEntry, TransactionType } from '@/features/finance/types';
-import { developerText } from '@/shared/config/appVariant';
+import { developerText, showDeveloperTools } from '@/shared/config/appVariant';
 import {
   buildCashflowTimeline,
   calculateSafeToSpend,
@@ -211,6 +210,10 @@ export default function OverviewScreen() {
       return;
     }
 
+    const nextDailyAllowance = type === 'expense'
+      ? Math.max((overview?.spendAllowance.dailyAllowance ?? 0) - parsedAmount, 0)
+      : overview?.spendAllowance.dailyAllowance ?? 0;
+
     try {
       await saveEntry.mutateAsync({
         id: editingEntry?.id,
@@ -232,8 +235,8 @@ export default function OverviewScreen() {
         message: overview?.spendAllowance.status === 'danger'
           ? '交易已儲存。本月安全可花額已偏低，接下來先停一下非必要支出。'
           : overview?.spendAllowance.status === 'tight'
-            ? '交易已儲存。本月現金流偏緊，今天先按可花額走。'
-            : editingEntry ? '交易已儲存修改。' : '交易已加入流水。',
+            ? `交易已儲存。本月現金流偏緊，這筆後今天約還能花 ${formatMoney(nextDailyAllowance)}。`
+            : editingEntry ? `交易已儲存修改。今天約還能花 ${formatMoney(nextDailyAllowance)}。` : `交易已加入流水。這筆後今天約還能花 ${formatMoney(nextDailyAllowance)}。`,
         type: 'success',
       });
     } catch (error) {
@@ -423,6 +426,18 @@ export default function OverviewScreen() {
               <Text className="font-black text-slate-800 mt-1">{formatMoney(overview.spendAllowance.monthlyRemaining)}</Text>
             </View>
           </View>
+          {showDeveloperTools && (
+            <View className="bg-white/60 rounded-xl p-3 mt-3">
+              <Text className="text-[11px] font-black text-slate-500 mb-1">Developer diagnostics</Text>
+              <Text className="text-[11px] text-slate-500 leading-5">
+                daysMonth={overview.spendAllowance.daysRemainingInMonth}; daysWeek={overview.spendAllowance.daysRemainingInWeek};
+                fixedIncome={formatMoney(overview.spendAllowance.remainingFixedIncome)};
+                fixedExpense={formatMoney(overview.spendAllowance.remainingFixedExpense)};
+                buffer={formatMoney(overview.spendAllowance.bufferAmount)};
+                requiredSavings={formatMoney(overview.savingPlan.requiredSavings)}
+              </Text>
+            </View>
+          )}
         </View>
 
         <View className="bg-white border border-slate-100 rounded-2xl p-4 mb-5">
@@ -474,12 +489,15 @@ export default function OverviewScreen() {
               <Text className="text-slate-400 text-xs">嚴格但不羞辱，只給今天能做的事</Text>
             </View>
           </View>
-          {overview.savingCoachSignals.map((signal, index) => (
-            <View key={`${signal.text}-${index}`} className="flex-row py-2 border-t border-white/10">
+          {overview.dailySavingActions.map((action, index) => (
+            <View key={`${action.title}-${index}`} className="flex-row py-2 border-t border-white/10">
               <View className={`w-2 h-2 rounded-full mt-2 mr-3 ${
-                signal.tone === 'danger' ? 'bg-rose-400' : signal.tone === 'tight' ? 'bg-amber-300' : 'bg-emerald-300'
+                action.tone === 'danger' ? 'bg-rose-400' : action.tone === 'tight' ? 'bg-amber-300' : 'bg-emerald-300'
               }`} />
-              <Text className="flex-1 text-slate-200 text-sm leading-6">{signal.text}</Text>
+              <View className="flex-1">
+                <Text className="text-white font-black text-sm">{action.title}</Text>
+                <Text className="text-slate-300 text-sm leading-6 mt-0.5">{action.text}</Text>
+              </View>
             </View>
           ))}
         </View>
@@ -701,21 +719,25 @@ export default function OverviewScreen() {
         )}
 
         <SectionHeader title="預算風險" actionLabel="查看全部" onAction={() => router.push('./budget')} />
-        {overview.budgets.length === 0 ? (
-          <EmptyState title="尚未設定預算" message="到預算頁為主要支出類別設定月限額。" />
+        {overview.pressurePoints.length === 0 ? (
+          <EmptyState title="暫無明顯壓力點" message="設定預算或支出規則後，這裡會指出最該收緊的類別。" />
         ) : (
-          overview.budgets
-            .slice()
-            .sort((a, b) => b.usage - a.usage)
-            .slice(0, 3)
-            .map((budget) => (
-              <BudgetProgressRow
-                key={budget.id}
-                category={budget.category}
-                spent={budget.spent}
-                limit={budget.monthly_limit}
-              />
-            ))
+          overview.pressurePoints.map((point) => (
+            <View key={point.categoryId} className="bg-white border border-slate-100 rounded-2xl p-4 mb-3">
+              <View className="flex-row justify-between items-start">
+                <View className="flex-1 pr-3">
+                  <Text className="font-black text-slate-800">{point.category?.name ?? '未分類'}</Text>
+                  <Text className="text-xs text-slate-400 mt-1">{point.reason}</Text>
+                </View>
+                <Text className={`font-black ${point.tone === 'danger' ? 'text-rose-600' : point.tone === 'tight' ? 'text-amber-600' : 'text-emerald-600'}`}>
+                  {Math.round(point.score * 100)}%
+                </Text>
+              </View>
+              <Text className="text-xs text-slate-500 mt-2">
+                本週 {formatMoney(point.weeklySpent)} · 本月 {formatMoney(point.monthlySpent)} · 剩 {formatMoney(point.remaining)}
+              </Text>
+            </View>
+          ))
         )}
 
         <SectionHeader title="最近流水" actionLabel="全部流水" onAction={() => router.push('/history')} />

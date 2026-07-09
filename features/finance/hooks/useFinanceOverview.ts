@@ -15,7 +15,10 @@ import {
   calculateGoalProgress,
   calculateMonthlySavingPlan,
   calculateSpendAllowance,
+  calculateSpendPressurePoints,
   getUpcomingRecurringItems,
+  calculateGoalCompletionProjection,
+  generateDailySavingActions,
   generateSavingCoachSignals,
 } from '@/features/finance/utils/finance';
 import { useFinanceData } from './useFinanceData';
@@ -55,6 +58,20 @@ export function useFinanceOverview() {
       savingPlanResult: savingPlan,
       bufferAmount: data.savingPlan?.buffer_amount,
     });
+    const pressurePoints = calculateSpendPressurePoints({
+      budgets,
+      spendingRules: data.spendingRules,
+      entries: data.entries,
+    });
+    const goalProjection = calculateGoalCompletionProjection({
+      goals,
+      savingPlanResult: savingPlan,
+    });
+    const dailySavingActions = generateDailySavingActions({
+      allowance: spendAllowance,
+      savingPlanResult: savingPlan,
+      pressurePoints,
+    });
     const savingCoachSignals = generateSavingCoachSignals({
       allowance: spendAllowance,
       savingPlanResult: savingPlan,
@@ -84,6 +101,9 @@ export function useFinanceOverview() {
       health,
       savingPlan,
       spendAllowance,
+      pressurePoints,
+      goalProjection,
+      dailySavingActions,
       savingCoachSignals,
     };
   }, [data]);

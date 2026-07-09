@@ -41,6 +41,14 @@ function BulletList({ items, color = 'text-slate-600' }: { items: string[]; colo
 export function BudgetPlanningReportView({ report }: Props) {
   const { financeData, saveBudget, saveSavingPlan, saveSpendingRule } = useFinanceOverview();
   const data = financeData.data;
+  const applyableChanges: ApplyableBudgetChange[] = report.applyableBudgetChanges?.length
+    ? report.applyableBudgetChanges
+    : report.categoryBudgets.map((item) => ({
+        category: item.category,
+        recommendedBudget: item.recommendedBudget,
+      }));
+  const reducedBudgets = report.categoryBudgets.filter((item) => (item.changeAmount ?? 0) < 0);
+  const newRules = applyableChanges.filter((item) => item.rulePeriod && item.ruleLimitAmount);
 
   const handleApplyPlan = () => {
     if (!data) return;
@@ -63,14 +71,7 @@ export function BudgetPlanningReportView({ report }: Props) {
               });
             }
 
-            const changes: ApplyableBudgetChange[] = report.applyableBudgetChanges?.length
-              ? report.applyableBudgetChanges
-              : report.categoryBudgets.map((item) => ({
-                  category: item.category,
-                  recommendedBudget: item.recommendedBudget,
-                }));
-
-            for (const change of changes) {
+            for (const change of applyableChanges) {
               const category = data.categories.find((item) => item.name === change.category && item.type === 'expense');
               if (!category) continue;
 
@@ -127,6 +128,19 @@ export function BudgetPlanningReportView({ report }: Props) {
               : ''}
           </Text>
         )}
+      </View>
+
+      <SectionTitle icon={<CheckCircle2 size={14} color="#16a34a" />} title="套用前差異摘要" />
+      <View className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 gap-1">
+        <Text className="text-emerald-800 text-[14px] font-bold">
+          預計多存 {report.expectedMonthlySavings != null ? `RM ${report.expectedMonthlySavings.toFixed(2)}` : report.recommendation.expectedSavingsAmount != null ? `RM ${report.recommendation.expectedSavingsAmount.toFixed(2)}` : '待確認'}
+        </Text>
+        <Text className="text-emerald-700 text-[13px] leading-5">
+          降低類別：{reducedBudgets.length > 0 ? reducedBudgets.map((item) => `${item.category} RM ${Math.abs(item.changeAmount ?? 0).toFixed(2)}`).join('、') : '沒有明確降低項目'}
+        </Text>
+        <Text className="text-emerald-700 text-[13px] leading-5">
+          新增規則：{newRules.length > 0 ? newRules.map((item) => `${item.category}${item.rulePeriod === 'day' ? '每日' : item.rulePeriod === 'week' ? '每週' : '每月'} RM ${item.ruleLimitAmount?.toFixed(2)}`).join('、') : '沒有新增短期規則'}
+        </Text>
       </View>
 
       <TouchableOpacity
