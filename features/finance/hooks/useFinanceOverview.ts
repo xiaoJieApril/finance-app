@@ -8,6 +8,7 @@ import { useEffect, useMemo } from 'react';
 import { rescheduleRecurringReminders } from '@/features/finance/services/notifications';
 import {
   calculateAccountBalances,
+  calculateAvailableCashFlowExcludingSavings,
   calculateBudgetUsage,
   calculateCashFlowForecast,
   calculateCashFlow,
@@ -41,6 +42,7 @@ export function useFinanceOverview() {
     const totalBudget = budgets.reduce((sum, budget) => sum + budget.monthly_limit, 0);
     const totalSpent = budgets.reduce((sum, budget) => sum + budget.spent, 0);
     const accounts = calculateAccountBalances(data.accounts, data.entries);
+    const availableCashFlowExcludingSavings = calculateAvailableCashFlowExcludingSavings(accounts, data.entries);
     const goals = calculateGoalProgress(data.goals);
     const upcomingRecurringItems = getUpcomingRecurringItems(data.recurringItems);
     const totalNetWorth = accounts.reduce((sum, account) => sum + (account.current_balance ?? 0), 0);
@@ -90,6 +92,7 @@ export function useFinanceOverview() {
       data,
       cashFlow,
       accounts,
+      availableCashFlowExcludingSavings,
       budgets,
       goals,
       upcomingRecurringItems,

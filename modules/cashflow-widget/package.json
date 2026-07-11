@@ -1,0 +1,11 @@
+{
+  "name": "cashflow-widget",
+  "version": "1.0.0",
+  "main": "src/CashflowWidget.ts",
+  "private": true,
+  "expo-module": {
+    "platforms": [
+      "android"
+    ]
+  }
+}

@@ -1,7 +1,7 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { useRouter } from 'expo-router';
-import { AlertTriangle, Bell, CalendarDays, Coffee, PiggyBank, Plus, RefreshCw, ShieldCheck, SlidersHorizontal, Target, Utensils, User, X } from 'lucide-react-native';
-import React, { useEffect, useMemo, useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { AlertTriangle, Bell, CalendarDays, Coffee, Eye, EyeOff, PiggyBank, Plus, RefreshCw, ShieldCheck, SlidersHorizontal, Target, Utensils, User, X } from 'lucide-react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -23,6 +23,7 @@ import { SectionHeader } from '@/features/finance/components/SectionHeader';
 import { SummaryMetric } from '@/features/finance/components/SummaryMetric';
 import { TransactionRow } from '@/features/finance/components/TransactionRow';
 import { CustomAlert, AlertConfig } from '@/shared/ui/CustomAlert';
+import { useCashflowWidget } from '@/features/finance/hooks/useCashflowWidget';
 import { useFinanceOverview } from '@/features/finance/hooks/useFinanceOverview';
 import { CurrencyCode, TransactionEntry, TransactionType } from '@/features/finance/types';
 import { developerText, showDeveloperTools } from '@/shared/config/appVariant';
@@ -61,6 +62,7 @@ const QUICK_TEMPLATES = [
 
 export default function OverviewScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ action?: string }>();
   const { session, isInitialized } = useAuthSession();
   const { overview, financeData, saveEntry, deleteEntry, saveSavingPlan, isLoading, error } = useFinanceOverview();
   const data = financeData.data;
@@ -91,6 +93,10 @@ export default function OverviewScreen() {
     message: '',
     type: 'info',
   });
+  const { isAmountVisible, toggleAmountVisible } = useCashflowWidget(
+    overview?.availableCashFlowExcludingSavings,
+    isInitialized && !session,
+  );
 
   const categories = useMemo(
     () => data?.categories.filter((category) => category.type === type) ?? [],
@@ -128,7 +134,7 @@ export default function OverviewScreen() {
     setBufferAmount(String(data.savingPlan.buffer_amount));
   }, [data?.savingPlan]);
 
-  const openNewEntry = () => {
+  const openNewEntry = useCallback(() => {
     const firstAccount = data?.accounts[0]?.id ?? null;
     const firstExpenseCategory = data?.categories.find((category) => category.type === 'expense')?.id ?? null;
     setEditingEntry(null);
@@ -142,7 +148,14 @@ export default function OverviewScreen() {
     setDate(new Date());
     setIsSavings(false);
     setModalVisible(true);
-  };
+  }, [data?.accounts, data?.categories]);
+
+  useEffect(() => {
+    if (params.action === 'new-entry' && session && data) {
+      openNewEntry();
+      router.setParams({ action: undefined });
+    }
+  }, [data, openNewEntry, params.action, router, session]);
 
   const openEditEntry = (entry: TransactionEntry) => {
     const nextType = entry.type;
@@ -506,9 +519,29 @@ export default function OverviewScreen() {
           <SummaryMetric label="收入" value={formatMoney(overview.cashFlow.income)} tone="income" />
           <SummaryMetric label="支出" value={formatMoney(overview.cashFlow.expense)} tone="expense" />
         </View>
-        <View className="flex-row gap-3 mb-5">
+        <View className="flex-row gap-3 mb-3">
           <SummaryMetric label="結餘" value={formatMoney(overview.cashFlow.balance)} />
           <SummaryMetric label="淨資產" value={formatMoney(overview.totalNetWorth)} />
+        </View>
+        <View className="bg-white border border-slate-100 rounded-2xl p-4 mb-5">
+          <View className="flex-row items-center justify-between mb-2">
+            <View>
+              <Text className="text-xs font-bold text-slate-400">可用現金流</Text>
+              <Text className="text-xs text-slate-400 mt-1">不包括已標記為存款/儲蓄的收入</Text>
+            </View>
+            <TouchableOpacity
+              onPress={toggleAmountVisible}
+              className="flex-row items-center bg-slate-50 border border-slate-100 px-3 py-2 rounded-xl"
+            >
+              {isAmountVisible ? <EyeOff size={16} color="#64748b" /> : <Eye size={16} color="#64748b" />}
+              <Text className="text-xs font-black text-slate-500 ml-1">
+                {isAmountVisible ? '隱藏' : '顯示'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <Text className="text-3xl font-black text-slate-900">
+            {isAmountVisible ? formatMoney(overview.availableCashFlowExcludingSavings) : 'RM ****'}
+          </Text>
         </View>
 
         <View className="bg-white border border-slate-100 rounded-2xl p-4 mb-6">

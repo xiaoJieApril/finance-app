@@ -1,0 +1,11 @@
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+  android:description="@string/cashflow_widget_description"
+  android:initialLayout="@layout/cashflow_widget"
+  android:minHeight="110dp"
+  android:minWidth="250dp"
+  android:previewLayout="@layout/cashflow_widget"
+  android:resizeMode="horizontal|vertical"
+  android:targetCellHeight="2"
+  android:targetCellWidth="4"
+  android:updatePeriodMillis="1800000"
+  android:widgetCategory="home_screen" />

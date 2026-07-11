@@ -98,6 +98,18 @@ export function calculateAccountBalances(accounts: FinanceAccount[], entries: Tr
   });
 }
 
+export function calculateAvailableCashFlowExcludingSavings(
+  accounts: FinanceAccount[],
+  entries: TransactionEntry[],
+) {
+  const netWorth = accounts.reduce((sum, account) => sum + (account.current_balance ?? 0), 0);
+  const markedSavings = entries
+    .filter((entry) => entry.type === 'income' && entry.is_savings)
+    .reduce((sum, entry) => sum + entryBaseAmount(entry), 0);
+
+  return Math.max(netWorth - markedSavings, 0);
+}
+
 export function getUpcomingRecurringItems(items: RecurringItem[], days = 14) {
   const now = new Date();
   const end = new Date();
