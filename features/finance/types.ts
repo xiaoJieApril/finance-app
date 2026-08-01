@@ -7,7 +7,19 @@
  */
 export type TransactionType = 'income' | 'expense' | 'transfer';
 export type CategoryType = 'income' | 'expense';
-export type AccountType = 'cash' | 'bank' | 'ewallet' | 'credit_card';
+export type AccountType =
+  | 'cash'
+  | 'bank'
+  | 'ewallet'
+  | 'credit_card'
+  | 'money_market'
+  | 'investment'
+  | 'stock'
+  | 'etf'
+  | 'crypto'
+  | 'retirement'
+  | 'fixed_deposit'
+  | 'other';
 export type CurrencyCode = string;
 export type SpendingRulePeriod = 'day' | 'week' | 'month';
 export type SavingPlanMode = 'rate' | 'amount';
@@ -47,7 +59,9 @@ export type FinanceAccount = {
   currency: CurrencyCode;
   initial_balance: number;
   current_balance?: number;
+  institution?: string | null;
   icon?: string;
+  color?: string | null;
   is_archived?: boolean;
   statement_day?: number | null;
   payment_due_day?: number | null;

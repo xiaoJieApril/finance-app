@@ -374,8 +374,8 @@ export default function OverviewScreen() {
       <ScrollView className="flex-1 px-5 pt-12" contentContainerStyle={{ paddingBottom: 110 }}>
         <View className="flex-row items-center justify-between mb-5">
           <View>
-            <Text className="text-sm font-semibold text-slate-400">本月財務總覽</Text>
-            <Text className="text-3xl font-black text-slate-900 mt-1">一眼掌握現金流</Text>
+            <Text className="text-sm font-semibold text-slate-400">Personal Wealth OS</Text>
+            <Text className="text-3xl font-black text-slate-900 mt-1">一眼掌握財富全局</Text>
           </View>
           <TouchableOpacity
             onPress={() => router.push('/profile')}
@@ -393,6 +393,61 @@ export default function OverviewScreen() {
             </Text>
           </View>
         )}
+
+        <View className="bg-slate-950 rounded-3xl p-5 mb-5">
+          <Text className="text-slate-400 text-xs font-bold mb-1">Current Net Worth</Text>
+          <Text className="text-white text-4xl font-black">{formatMoney(overview.wealth.netWorth)}</Text>
+          <View className="flex-row gap-3 mt-4">
+            <TouchableOpacity onPress={() => router.push('/accounts')} className="flex-1 bg-white/10 rounded-2xl p-3">
+              <Text className="text-slate-400 text-[11px] font-bold">Total Assets</Text>
+              <Text className="text-white font-black mt-1">{formatMoney(overview.wealth.totalAssets)}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push('/accounts')} className="flex-1 bg-white/10 rounded-2xl p-3">
+              <Text className="text-slate-400 text-[11px] font-bold">Liabilities</Text>
+              <Text className="text-rose-200 font-black mt-1">{formatMoney(overview.wealth.totalLiabilities)}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View className="flex-row gap-3 mb-3">
+          <SummaryMetric label="月收入" value={formatMoney(overview.cashFlow.income)} tone="income" />
+          <SummaryMetric label="月支出" value={formatMoney(overview.cashFlow.expense)} tone="expense" />
+        </View>
+        <View className="flex-row gap-3 mb-3">
+          <SummaryMetric label="月儲蓄" value={formatMoney(overview.wealth.monthlySavings)} />
+          <SummaryMetric label="投資價值" value={formatMoney(overview.wealth.investmentValue)} />
+        </View>
+        <View className="flex-row gap-3 mb-5">
+          <SummaryMetric label="緊急預備金" value={formatMoney(overview.wealth.emergencyFund)} />
+          <SummaryMetric label="儲蓄率" value={`${Math.round(overview.wealth.savingsRate * 100)}%`} />
+        </View>
+
+        <TouchableOpacity onPress={() => router.push('/insights')} className="bg-white border border-slate-100 rounded-2xl p-4 mb-5">
+          <View className="flex-row justify-between items-center mb-3">
+            <View>
+              <Text className="font-black text-slate-900">資產配置</Text>
+              <Text className="text-xs text-slate-400 mt-1">Cash / Bank / Investment / Crypto / ETF</Text>
+            </View>
+            <Text className="font-black text-indigo-600">
+              投資率 {Math.round(overview.wealth.investmentRate * 100)}%
+            </Text>
+          </View>
+          {overview.assetAllocation.length === 0 ? (
+            <Text className="text-sm text-slate-400">新增資產帳戶後，這裡會顯示配置比例。</Text>
+          ) : (
+            overview.assetAllocation.slice(0, 5).map((item) => (
+              <View key={item.key} className="mb-3">
+                <View className="flex-row justify-between mb-1">
+                  <Text className="text-sm font-bold text-slate-700">{item.key.replace('_', ' ').toUpperCase()}</Text>
+                  <Text className="text-sm font-black text-slate-800">{Math.round(item.percentage * 100)}%</Text>
+                </View>
+                <View className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <View className="h-full bg-indigo-600 rounded-full" style={{ width: `${Math.max(item.percentage * 100, 4)}%` }} />
+                </View>
+              </View>
+            ))
+          )}
+        </TouchableOpacity>
 
         <View className={`border rounded-2xl p-5 mb-5 ${
           overview.spendAllowance.status === 'danger'
@@ -515,14 +570,7 @@ export default function OverviewScreen() {
           ))}
         </View>
 
-        <View className="flex-row gap-3 mb-3">
-          <SummaryMetric label="收入" value={formatMoney(overview.cashFlow.income)} tone="income" />
-          <SummaryMetric label="支出" value={formatMoney(overview.cashFlow.expense)} tone="expense" />
-        </View>
-        <View className="flex-row gap-3 mb-3">
-          <SummaryMetric label="結餘" value={formatMoney(overview.cashFlow.balance)} />
-          <SummaryMetric label="淨資產" value={formatMoney(overview.totalNetWorth)} />
-        </View>
+        <SectionHeader title="現金流控制" />
         <View className="bg-white border border-slate-100 rounded-2xl p-4 mb-5">
           <View className="flex-row items-center justify-between mb-2">
             <View>

@@ -57,6 +57,16 @@ export default function InsightsScreen() {
     });
   }, [data]);
 
+  const assetPieData = useMemo(() => {
+    if (!overview) return [];
+    return overview.assetAllocation.map((item, index) => ({
+      value: item.amount,
+      name: item.key.replace('_', ' ').toUpperCase(),
+      color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
+      text: `${Math.round(item.percentage * 100)}%`,
+    }));
+  }, [overview]);
+
   const exportTransactions = (format: 'pdf' | 'csv') => {
     if (!data || data.entries.length === 0) {
       Alert.alert('提示', '目前沒有流水可匯出。');
@@ -158,6 +168,58 @@ export default function InsightsScreen() {
             </View>
           </View>
         )}
+
+        <SectionHeader title="資產配置" />
+        {assetPieData.length === 0 ? (
+          <EmptyState title="沒有資產配置資料" message="新增現金、銀行、ETF、Crypto 等帳戶後，這裡會顯示配置。" />
+        ) : (
+          <View className="bg-white border border-slate-100 rounded-2xl p-5 mb-5 items-center">
+            <PieChart
+              data={assetPieData}
+              donut
+              radius={92}
+              innerRadius={56}
+              textColor="white"
+              showText
+              centerLabelComponent={() => (
+                <View className="items-center">
+                  <Text className="text-slate-400 text-xs">Assets</Text>
+                  <Text className="text-slate-900 font-black">{formatMoney(overview.wealth.totalAssets)}</Text>
+                </View>
+              )}
+            />
+            <View className="w-full mt-5">
+              {assetPieData.map((item) => (
+                <View key={item.name} className="flex-row items-center justify-between py-2">
+                  <View className="flex-row items-center">
+                    <View className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: item.color }} />
+                    <Text className="font-bold text-slate-700">{item.name}</Text>
+                  </View>
+                  <Text className="font-black text-slate-800">{formatMoney(item.value)}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
+        <SectionHeader title="花費偵測" />
+        <View className="bg-white border border-slate-100 rounded-2xl p-5 mb-5">
+          <Text className="text-sm text-slate-500 leading-6">
+            最高類別：{overview.spendingInsights.mostExpensiveCategory?.name ?? '暫無'} · {formatMoney(overview.spendingInsights.mostExpensiveCategory?.amount ?? 0)}
+          </Text>
+          <Text className="text-sm text-slate-500 leading-6">
+            最高單日：{overview.spendingInsights.highestSpendingDay?.date ?? '暫無'} · {formatMoney(overview.spendingInsights.highestSpendingDay?.amount ?? 0)}
+          </Text>
+          <Text className="text-sm text-slate-500 leading-6">
+            平均每日支出：{formatMoney(overview.spendingInsights.averageDailySpending)}
+          </Text>
+          <Text className="text-sm text-slate-500 leading-6">
+            週末支出：{formatMoney(overview.spendingInsights.weekendSpending)}
+          </Text>
+          <Text className="text-sm text-slate-500 leading-6">
+            疑似訂閱 {overview.spendingInsights.possibleSubscriptions.length} 筆 · 疑似重複購買 {overview.spendingInsights.duplicatePurchases.length} 筆
+          </Text>
+        </View>
 
         <SectionHeader title="近 7 日支出" />
         <View className="bg-white border border-slate-100 rounded-2xl p-5 mb-6">

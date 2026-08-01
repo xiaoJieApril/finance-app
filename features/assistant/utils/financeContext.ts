@@ -38,6 +38,14 @@ type FinanceContextInput = {
     netCashFlow: number;
     savingsRatePercent: number | null;
   };
+  wealth: {
+    totalAssets: number;
+    totalLiabilities: number;
+    netWorth: number;
+    investmentValue: number;
+    emergencyFund: number;
+    investmentRatePercent: number;
+  };
   budgets: {
     totalBudget: number;
     totalSpent: number;
@@ -56,6 +64,19 @@ type FinanceContextInput = {
       paymentDueDay?: number | null;
       interestRate?: number | null;
     }[];
+  };
+  assetAllocation: {
+    group: string;
+    amount: number;
+    percentage: number;
+  }[];
+  spendingInsights: {
+    mostExpensiveCategory?: { name: string; amount: number } | null;
+    highestSpendingDay?: { date: string; amount: number } | null;
+    averageDailySpending: number;
+    weekendSpending: number;
+    possibleSubscriptionCount: number;
+    duplicatePurchaseCount: number;
   };
   goals: {
     name: string;
@@ -116,6 +137,14 @@ type FinanceContextInput = {
 
 type OverviewSnapshot = {
   cashFlow: { income: number; expense: number; balance: number };
+  wealth: {
+    totalAssets: number;
+    totalLiabilities: number;
+    netWorth: number;
+    investmentValue: number;
+    emergencyFund: number;
+    investmentRate: number;
+  };
   accounts: {
     name: string;
     type: string;
@@ -126,6 +155,19 @@ type OverviewSnapshot = {
     payment_due_day?: number | null;
     interest_rate?: number | null;
   }[];
+  assetAllocation: {
+    key: string;
+    amount: number;
+    percentage: number;
+  }[];
+  spendingInsights: {
+    mostExpensiveCategory: { name: string; amount: number } | null;
+    highestSpendingDay: { date: string; amount: number } | null;
+    averageDailySpending: number;
+    weekendSpending: number;
+    possibleSubscriptions: unknown[];
+    duplicatePurchases: unknown[];
+  };
   budgets: {
     category_id: string;
     monthly_limit: number;
@@ -248,6 +290,14 @@ export function buildFinanceContext(params: {
       netCashFlow: overview.cashFlow.balance,
       savingsRatePercent,
     },
+    wealth: {
+      totalAssets: overview.wealth.totalAssets,
+      totalLiabilities: overview.wealth.totalLiabilities,
+      netWorth: overview.wealth.netWorth,
+      investmentValue: overview.wealth.investmentValue,
+      emergencyFund: overview.wealth.emergencyFund,
+      investmentRatePercent: overview.wealth.investmentRate * 100,
+    },
     budgets: {
       totalBudget: overview.totalBudget,
       totalSpent: overview.totalBudgetSpent,
@@ -273,6 +323,19 @@ export function buildFinanceContext(params: {
         paymentDueDay: account.payment_due_day,
         interestRate: account.interest_rate,
       })),
+    },
+    assetAllocation: overview.assetAllocation.map((item) => ({
+      group: item.key,
+      amount: item.amount,
+      percentage: item.percentage * 100,
+    })),
+    spendingInsights: {
+      mostExpensiveCategory: overview.spendingInsights.mostExpensiveCategory,
+      highestSpendingDay: overview.spendingInsights.highestSpendingDay,
+      averageDailySpending: overview.spendingInsights.averageDailySpending,
+      weekendSpending: overview.spendingInsights.weekendSpending,
+      possibleSubscriptionCount: overview.spendingInsights.possibleSubscriptions.length,
+      duplicatePurchaseCount: overview.spendingInsights.duplicatePurchases.length,
     },
     goals: (overview.goalProjection ?? overview.goals).map((goal) => ({
       name: goal.name,

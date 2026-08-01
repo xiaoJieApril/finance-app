@@ -14,11 +14,14 @@ import {
   calculateCashFlow,
   calculateFinancialHealth,
   calculateGoalProgress,
+  calculateAssetAllocation,
   calculateMonthlySavingPlan,
   calculateSpendAllowance,
   calculateSpendPressurePoints,
+  calculateWealthSnapshot,
   getUpcomingRecurringItems,
   calculateGoalCompletionProjection,
+  generateSpendingInsights,
   generateDailySavingActions,
   generateSavingCoachSignals,
 } from '@/features/finance/utils/finance';
@@ -44,8 +47,11 @@ export function useFinanceOverview() {
     const accounts = calculateAccountBalances(data.accounts, data.entries);
     const availableCashFlowExcludingSavings = calculateAvailableCashFlowExcludingSavings(accounts, data.entries);
     const goals = calculateGoalProgress(data.goals);
+    const wealth = calculateWealthSnapshot({ accounts, entries: data.entries, goals: data.goals });
+    const assetAllocation = calculateAssetAllocation(accounts);
+    const spendingInsights = generateSpendingInsights(data.entries);
     const upcomingRecurringItems = getUpcomingRecurringItems(data.recurringItems);
-    const totalNetWorth = accounts.reduce((sum, account) => sum + (account.current_balance ?? 0), 0);
+    const totalNetWorth = wealth.netWorth;
     const forecast = calculateCashFlowForecast(totalNetWorth, data.recurringItems);
     const savingPlan = calculateMonthlySavingPlan({
       cashFlow,
@@ -92,6 +98,9 @@ export function useFinanceOverview() {
       data,
       cashFlow,
       accounts,
+      wealth,
+      assetAllocation,
+      spendingInsights,
       availableCashFlowExcludingSavings,
       budgets,
       goals,

@@ -17,6 +17,9 @@ import {
 import { isSameMonth } from './date';
 
 type SavingCoachTone = 'safe' | 'tight' | 'danger';
+type AssetAllocationKey = 'cash' | 'investment' | 'money_market' | 'crypto' | 'stocks' | 'etf' | 'bank' | 'others';
+
+const INVESTMENT_ACCOUNT_TYPES = new Set(['investment', 'stock', 'etf', 'crypto', 'retirement']);
 
 export function entryBaseAmount(entry: TransactionEntry) {
   return entry.base_currency_amount ?? 0;
@@ -96,6 +99,141 @@ export function calculateAccountBalances(accounts: FinanceAccount[], entries: Tr
       current_balance: account.initial_balance + movement,
     };
   });
+}
+
+function accountBalance(account: FinanceAccount) {
+  return account.current_balance ?? account.initial_balance ?? 0;
+}
+
+function isLiabilityAccount(account: FinanceAccount) {
+  return account.type === 'credit_card';
+}
+
+function classifyAssetAccount(account: FinanceAccount): AssetAllocationKey {
+  if (account.type === 'cash' || account.type === 'ewallet') return 'cash';
+  if (account.type === 'bank') return 'bank';
+  if (account.type === 'money_market' || account.type === 'fixed_deposit') return 'money_market';
+  if (account.type === 'crypto') return 'crypto';
+  if (account.type === 'stock') return 'stocks';
+  if (account.type === 'etf') return 'etf';
+  if (account.type === 'investment' || account.type === 'retirement') return 'investment';
+  return 'others';
+}
+
+export function calculateWealthSnapshot(params: {
+  accounts: FinanceAccount[];
+  entries: TransactionEntry[];
+  goals: SavingsGoal[];
+}) {
+  const { accounts, entries, goals } = params;
+  const totalAssets = accounts
+    .filter((account) => !isLiabilityAccount(account))
+    .reduce((sum, account) => sum + Math.max(accountBalance(account), 0), 0);
+  const totalLiabilities = accounts
+    .filter(isLiabilityAccount)
+    .reduce((sum, account) => sum + Math.max(account.outstanding_balance ?? Math.abs(Math.min(accountBalance(account), 0)), 0), 0);
+  const netWorth = totalAssets - totalLiabilities;
+  const investmentValue = accounts
+    .filter((account) => INVESTMENT_ACCOUNT_TYPES.has(account.type))
+    .reduce((sum, account) => sum + Math.max(accountBalance(account), 0), 0);
+  const emergencyFund = goals
+    .filter((goal) => goal.goal_type === 'emergency' || goal.name.toLowerCase().includes('emergency') || goal.name.includes('緊急'))
+    .reduce((sum, goal) => sum + goal.current_amount, 0);
+  const cashFlow = calculateCashFlow(entries);
+  const monthlySavings = cashFlow.balance;
+  const savingsRate = cashFlow.income > 0 ? Math.max(monthlySavings / cashFlow.income, 0) : 0;
+  const investmentRate = cashFlow.income > 0 ? Math.min(investmentValue / cashFlow.income, 1) : 0;
+
+  return {
+    totalAssets,
+    totalLiabilities,
+    netWorth,
+    investmentValue,
+    emergencyFund,
+    monthlySavings,
+    savingsRate,
+    investmentRate,
+  };
+}
+
+export function calculateAssetAllocation(accounts: FinanceAccount[]) {
+  const buckets: Record<AssetAllocationKey, number> = {
+    cash: 0,
+    investment: 0,
+    money_market: 0,
+    crypto: 0,
+    stocks: 0,
+    etf: 0,
+    bank: 0,
+    others: 0,
+  };
+
+  accounts
+    .filter((account) => !isLiabilityAccount(account))
+    .forEach((account) => {
+      buckets[classifyAssetAccount(account)] += Math.max(accountBalance(account), 0);
+    });
+
+  const total = Object.values(buckets).reduce((sum, amount) => sum + amount, 0);
+
+  return Object.entries(buckets)
+    .map(([key, amount]) => ({
+      key: key as AssetAllocationKey,
+      amount,
+      percentage: total > 0 ? amount / total : 0,
+    }))
+    .filter((item) => item.amount > 0)
+    .sort((left, right) => right.amount - left.amount);
+}
+
+export function generateSpendingInsights(entries: TransactionEntry[]) {
+  const expenseEntries = entries.filter((entry) => entry.type === 'expense');
+  const categoryTotals = new Map<string, { name: string; amount: number }>();
+  const dayTotals = new Map<string, number>();
+  let weekendSpending = 0;
+
+  expenseEntries.forEach((entry) => {
+    const amount = entryBaseAmount(entry);
+    const categoryKey = entry.category_id ?? 'uncategorized';
+    const category = categoryTotals.get(categoryKey) ?? { name: entry.category?.name ?? '未分類', amount: 0 };
+    category.amount += amount;
+    categoryTotals.set(categoryKey, category);
+
+    const dayKey = new Date(entry.date).toLocaleDateString('en-CA');
+    dayTotals.set(dayKey, (dayTotals.get(dayKey) ?? 0) + amount);
+
+    const day = new Date(entry.date).getDay();
+    if (day === 0 || day === 6) weekendSpending += amount;
+  });
+
+  const totalExpense = expenseEntries.reduce((sum, entry) => sum + entryBaseAmount(entry), 0);
+  const mostExpensiveCategory = Array.from(categoryTotals.values()).sort((left, right) => right.amount - left.amount)[0] ?? null;
+  const highestSpendingDay = Array.from(dayTotals.entries())
+    .map(([date, amount]) => ({ date, amount }))
+    .sort((left, right) => right.amount - left.amount)[0] ?? null;
+  const uniqueDays = Math.max(dayTotals.size, 1);
+  const possibleSubscriptions = expenseEntries.filter((entry) => {
+    const text = `${entry.note} ${entry.category?.name ?? ''}`.toLowerCase();
+    return ['netflix', 'spotify', 'subscription', '訂閱', '保險', 'insurance', 'phone'].some((keyword) => text.includes(keyword));
+  });
+  const duplicatePurchases = expenseEntries.filter((entry, index) =>
+    expenseEntries.findIndex(
+      (other) =>
+        other.id !== entry.id &&
+        other.note.trim().toLowerCase() === entry.note.trim().toLowerCase() &&
+        entryBaseAmount(other) === entryBaseAmount(entry) &&
+        new Date(other.date).toLocaleDateString('en-CA') === new Date(entry.date).toLocaleDateString('en-CA'),
+    ) < index,
+  );
+
+  return {
+    mostExpensiveCategory,
+    highestSpendingDay,
+    averageDailySpending: totalExpense / uniqueDays,
+    weekendSpending,
+    possibleSubscriptions,
+    duplicatePurchases,
+  };
 }
 
 export function calculateAvailableCashFlowExcludingSavings(

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Text, View } from 'react-native';
-import { CreditCard, Landmark, Wallet } from 'lucide-react-native';
+import { Bitcoin, CreditCard, Landmark, LineChart, PiggyBank, Wallet } from 'lucide-react-native';
 import { FinanceAccount } from '@/features/finance/types';
 import { formatMoney } from '@/features/finance/utils/finance';
 
@@ -8,21 +8,26 @@ function AccountIcon({ type }: { type: FinanceAccount['type'] }) {
   const color = '#4f46e5';
   if (type === 'bank') return <Landmark size={18} color={color} />;
   if (type === 'credit_card') return <CreditCard size={18} color={color} />;
+  if (type === 'crypto') return <Bitcoin size={18} color={color} />;
+  if (type === 'stock' || type === 'etf' || type === 'investment') return <LineChart size={18} color={color} />;
+  if (type === 'money_market' || type === 'fixed_deposit' || type === 'retirement') return <PiggyBank size={18} color={color} />;
   return <Wallet size={18} color={color} />;
 }
 
 export function AccountBalanceCard({ account }: { account: FinanceAccount }) {
+  const accent = account.color?.trim() || '#4f46e5';
+
   return (
     <View className="bg-white border border-slate-200 rounded-xl p-4 mr-3 min-w-[176px]">
       <View className="flex-row items-center mb-3">
-        <View className="w-9 h-9 rounded-lg bg-indigo-50 items-center justify-center mr-3">
+        <View className="w-9 h-9 rounded-lg bg-indigo-50 items-center justify-center mr-3" style={{ borderColor: accent, borderWidth: 1 }}>
           <AccountIcon type={account.type} />
         </View>
         <View className="flex-1">
           <Text className="text-sm font-bold text-slate-800" numberOfLines={1}>
             {account.name}
           </Text>
-          <Text className="text-xs text-slate-400">{account.currency}</Text>
+          <Text className="text-xs text-slate-400">{account.institution || account.currency}</Text>
         </View>
       </View>
       <Text className="text-xl font-black text-slate-900" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72}>

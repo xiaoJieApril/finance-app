@@ -581,7 +581,9 @@ export type UpsertAccountInput = {
   type: AccountType;
   currency: CurrencyCode;
   initial_balance: number;
+  institution?: string | null;
   icon?: string;
+  color?: string | null;
   statement_day?: number | null;
   payment_due_day?: number | null;
   minimum_payment?: number | null;

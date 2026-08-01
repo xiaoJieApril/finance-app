@@ -17,6 +17,13 @@ const ACCOUNT_TYPES = [
   { label: '銀行', value: 'bank' },
   { label: '電子錢包', value: 'ewallet' },
   { label: '信用卡', value: 'credit_card' },
+  { label: '貨幣基金', value: 'money_market' },
+  { label: '股票', value: 'stock' },
+  { label: 'ETF', value: 'etf' },
+  { label: 'Crypto', value: 'crypto' },
+  { label: 'EPF/退休', value: 'retirement' },
+  { label: '定存', value: 'fixed_deposit' },
+  { label: '其他', value: 'other' },
 ] as const;
 
 const CURRENCIES = [
@@ -42,6 +49,8 @@ export default function AccountsScreen() {
   const [type, setType] = useState<AccountType>('cash');
   const [currency, setCurrency] = useState<CurrencyCode>('MYR');
   const [initialBalance, setInitialBalance] = useState('');
+  const [institution, setInstitution] = useState('');
+  const [color, setColor] = useState('');
   const [statementDay, setStatementDay] = useState('');
   const [paymentDueDay, setPaymentDueDay] = useState('');
   const [minimumPayment, setMinimumPayment] = useState('');
@@ -56,6 +65,8 @@ export default function AccountsScreen() {
     setType(account?.type ?? 'cash');
     setCurrency(account?.currency ?? 'MYR');
     setInitialBalance(String(account?.initial_balance ?? ''));
+    setInstitution(account?.institution ?? '');
+    setColor(account?.color ?? '');
     setStatementDay(account?.statement_day ? String(account.statement_day) : '');
     setPaymentDueDay(account?.payment_due_day ? String(account.payment_due_day) : '');
     setMinimumPayment(account?.minimum_payment ? String(account.minimum_payment) : '');
@@ -78,6 +89,8 @@ export default function AccountsScreen() {
         type,
         currency,
         initial_balance: Number(initialBalance) || 0,
+        institution: institution.trim() || null,
+        color: color.trim() || null,
         statement_day: type === 'credit_card' ? Number(statementDay) || null : null,
         payment_due_day: type === 'credit_card' ? Number(paymentDueDay) || null : null,
         minimum_payment: type === 'credit_card' ? Number(minimumPayment) || 0 : null,
@@ -191,6 +204,10 @@ export default function AccountsScreen() {
             <FilterBar options={[...CURRENCIES]} value={currency} onChange={setCurrency} />
             <Text className="text-sm font-bold text-slate-500 mb-2">初始餘額</Text>
             <TextInput value={initialBalance} onChangeText={setInitialBalance} keyboardType="numeric" placeholder="0.00" className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-5" />
+            <Text className="text-sm font-bold text-slate-500 mb-2">機構 / 平台</Text>
+            <TextInput value={institution} onChangeText={setInstitution} placeholder="例如：Maybank、Versa、Rakuten、Binance" className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-4" />
+            <Text className="text-sm font-bold text-slate-500 mb-2">顏色</Text>
+            <TextInput value={color} onChangeText={setColor} placeholder="例如：#4f46e5" className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-5" />
             {type === 'credit_card' && (
               <>
                 <View className="flex-row gap-3">
