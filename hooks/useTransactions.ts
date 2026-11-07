@@ -85,9 +85,9 @@ export const useTransactions = () => {
   });
 
   const updateCategory = useMutation({
-    mutationFn: async (values: { id: string; name: string; type: Category['type'] }) => {
+    mutationFn: async (values: { id: string; name: string }) => {
       if (!userId) throw new Error('请先登录后再修改类别。');
-      return updateLocalCategory(userId, values.id, values.name, values.type);
+      return updateLocalCategory(userId, values.id, values.name);
     },
     onSuccess: invalidate,
   });

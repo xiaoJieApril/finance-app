@@ -13,7 +13,7 @@ const palette = {
   muted: '#5D6D63',
 };
 
-const CategoryMark = ({ category }: { category?: Category }) => {
+const CategoryMark = ({ category }: { category?: Category | null }) => {
   const props = { size: 18, color: palette.moss, strokeWidth: 1.8 };
   switch (category?.icon) {
     case 'utensils': return <Coffee {...props} />;

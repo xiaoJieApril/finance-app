@@ -1,21 +1,8 @@
-export type Transaction = {
-  id: string;
-  user_id: string;
-  category_id: string;
-  amount: number;
-  note: string;
-  date: string;
-  updated_at: string;
-  deleted_at?: string | null;
-  category?: Category;
-};
+import type { Database } from './database';
 
-export type Category = {
-  id: string;
-  name: string;
-  icon: string;
-  type: 'income' | 'expense';
-  user_id: string;
-  updated_at: string;
-  archived_at?: string | null;
+export type Category = Database['public']['Tables']['categories']['Row'];
+export type TransactionRecord = Database['public']['Tables']['transactions']['Row'];
+export type Transaction = Omit<TransactionRecord, 'deleted_at'> & {
+  deleted_at?: TransactionRecord['deleted_at'];
+  category?: Category | null;
 };

@@ -39,7 +39,7 @@ export default function CategoriesScreen() {
       return;
     }
     try {
-      if (editing) await updateCategory.mutateAsync({ id: editing.id, name: trimmedName, type: editing.type });
+      if (editing) await updateCategory.mutateAsync({ id: editing.id, name: trimmedName });
       else await addCategory.mutateAsync({ name: trimmedName, type });
       setModalVisible(false);
     } catch (error) {

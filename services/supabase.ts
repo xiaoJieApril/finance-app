@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
 import 'react-native-url-polyfill/auto';
+import type { Database } from '../type/database';
 
 // 建立一個安全的儲存轉接器 (解決 window is not defined 的報錯)
 const customStorageAdapter = {
@@ -37,7 +38,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error('缺少 Supabase 環境變數，請檢查 .env 檔案是否配置正確。');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: customStorageAdapter, // 改用我們自定義的 Adapter
     autoRefreshToken: true,

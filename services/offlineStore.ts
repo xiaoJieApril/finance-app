@@ -1,23 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
 import { Category, Transaction } from '../type';
+import type { LocalDatabaseV1, PendingChange } from '../type/localDatabase';
 import { useSyncStore } from '../store/useSyncStore';
-
-type PendingChange = {
-  entity: 'transactions' | 'categories';
-  id: string;
-  operation: 'upsert' | 'delete';
-  revision: string;
-};
-
-type LocalDatabase = {
-  version: 1;
-  userId: string;
-  transactions: Transaction[];
-  categories: Category[];
-  pending: PendingChange[];
-  pulledRemote: boolean;
-};
 
 const keyFor = (userId: string) => `finance-local-v1:${userId}`;
 let writeChain: Promise<unknown> = Promise.resolve();
@@ -29,7 +14,7 @@ const serialized = <T,>(task: () => Promise<T>): Promise<T> => {
   return result;
 };
 
-const emptyDatabase = (userId: string): LocalDatabase => ({
+const emptyDatabase = (userId: string): LocalDatabaseV1 => ({
   version: 1,
   userId,
   transactions: [],
@@ -38,12 +23,12 @@ const emptyDatabase = (userId: string): LocalDatabase => ({
   pulledRemote: false,
 });
 
-const readDatabase = async (userId: string): Promise<LocalDatabase> => {
+const readDatabase = async (userId: string): Promise<LocalDatabaseV1> => {
   const raw = await AsyncStorage.getItem(keyFor(userId));
   if (!raw) return emptyDatabase(userId);
-  let parsed: LocalDatabase;
+  let parsed: LocalDatabaseV1;
   try {
-    parsed = JSON.parse(raw) as LocalDatabase;
+    parsed = JSON.parse(raw) as LocalDatabaseV1;
   } catch {
     throw new Error('本机账本数据无法读取。为避免覆盖原记录，请先保留应用数据并联系支持。');
   }
@@ -57,7 +42,7 @@ const readDatabase = async (userId: string): Promise<LocalDatabase> => {
   };
 };
 
-const writeDatabase = async (db: LocalDatabase) => {
+const writeDatabase = async (db: LocalDatabaseV1) => {
   await AsyncStorage.setItem(keyFor(db.userId), JSON.stringify(db));
   useSyncStore.getState().setPendingCount(db.pending.length);
 };
@@ -88,20 +73,20 @@ const stableUuid = (value: string) => {
   return `${id.slice(0, 8)}-${id.slice(8, 12)}-${id.slice(12, 16)}-${id.slice(16, 20)}-${id.slice(20)}`;
 };
 
-const markPending = (db: LocalDatabase, entity: PendingChange['entity'], id: string, operation: PendingChange['operation']) => {
+const markPending = (db: LocalDatabaseV1, entity: PendingChange['entity'], id: string, operation: PendingChange['operation']) => {
   const change: PendingChange = { entity, id, operation, revision: makeUuid() };
   db.pending = db.pending.filter((item) => !(item.entity === entity && item.id === id));
   db.pending.push(change);
 };
 
-const mutateDatabase = (userId: string, mutator: (db: LocalDatabase) => void) => serialized(async () => {
+const mutateDatabase = (userId: string, mutator: (db: LocalDatabaseV1) => void) => serialized(async () => {
   const db = await readDatabase(userId);
   mutator(db);
   await writeDatabase(db);
   return db;
 });
 
-const withCategories = (db: LocalDatabase): Transaction[] => {
+const withCategories = (db: LocalDatabaseV1): Transaction[] => {
   const categories = new Map(db.categories.map((category) => [category.id, category]));
   return db.transactions
     .filter((transaction) => !transaction.deleted_at)
@@ -146,11 +131,11 @@ export const addLocalCategory = (userId: string, name: string, type: Category['t
     markPending(db, 'categories', category.id, 'upsert');
   });
 
-export const updateLocalCategory = (userId: string, id: string, name: string, type: Category['type']) =>
+export const updateLocalCategory = (userId: string, id: string, name: string) =>
   mutateDatabase(userId, (db) => {
     const category = db.categories.find((item) => item.id === id);
     if (!category) throw new Error('找不到这个类别。');
-    Object.assign(category, { name: name.trim(), type, updated_at: new Date().toISOString() });
+    Object.assign(category, { name: name.trim(), updated_at: new Date().toISOString() });
     markPending(db, 'categories', id, 'upsert');
   });
 
@@ -212,7 +197,7 @@ const syncOnce = async (userId: string) => {
 
   const [remoteCategories, remoteTransactions] = await Promise.all([
     supabase.from('categories').select('*').eq('user_id', userId),
-    supabase.from('transactions').select('*, category:categories(*)').eq('user_id', userId),
+    supabase.from('transactions').select('*, category:categories!transactions_category_user_id_fkey!inner(*)').eq('user_id', userId),
   ]);
   if (remoteCategories.error) throw remoteCategories.error;
   if (remoteTransactions.error) throw remoteTransactions.error;
