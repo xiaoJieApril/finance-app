@@ -1,134 +1,151 @@
-import { BookOpen, Car, DollarSign, Heart, MessageSquareText, Trash2, Utensils, Wallet } from 'lucide-react-native';
-import React, { useMemo } from 'react';
-import { ActivityIndicator, Alert, SectionList, Text, TouchableOpacity, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Search, X } from 'lucide-react-native';
+import React, { useMemo, useState } from 'react';
+import { ActivityIndicator, SectionList, Text, TextInput, TouchableOpacity, View, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { SyncIndicator, TransactionRow } from '../../components/ledger';
 import { useTransactions } from '../../hooks/useTransactions';
-import { Transaction } from '../../type';
+import { toDateKey } from '../../services/dateUtils';
+import { Category, Transaction } from '../../type';
 
-// 沿用我們熟悉的類別圖標邏輯
-const getCategoryIcon = (categoryName: string) => {
-  if (!categoryName) return <DollarSign size={22} color="#64748b" />;
-  if (categoryName.includes('211')) return <Utensils size={22} color="#f59e0b" />;
-  if (categoryName.includes('Hololive')) return <Heart size={22} color="#f43f5e" />;
-  if (categoryName.includes('JLPT')) return <BookOpen size={22} color="#0ea5e9" />;
-  if (categoryName.includes('交通')) return <Car size={22} color="#8b5cf6" />;
-  if (categoryName.includes('薪資')) return <Wallet size={22} color="#10b981" />;
-  return <DollarSign size={22} color="#64748b" />;
-};
+type MonthSection = { title: string; data: Transaction[] };
+type TypeFilter = 'all' | Category['type'];
 
 export default function HistoryScreen() {
-  const { fetchTransactions, deleteTransaction } = useTransactions();
-  const { data: transactions, isLoading } = fetchTransactions;
+  const router = useRouter();
+  const { userId, fetchTransactions, fetchCategories } = useTransactions();
+  const [searchText, setSearchText] = useState('');
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const categories = fetchCategories.data ?? [];
 
-  // ==========================================
-  // 🌟 將資料依「年份與月份」進行分組
-  // ==========================================
-  const groupedTransactions = useMemo(() => {
-    if (!transactions || transactions.length === 0) return [];
-    
-    // 建立一個字典來存放每個月的資料
-    const groups: { [key: string]: Transaction[] } = {};
-    
-    transactions.forEach(tx => {
-      const d = new Date(tx.date);
-      // 產出例如 "2026年 5月" 的標題
-      const monthKey = `${d.getFullYear()}年 ${d.getMonth() + 1}月`;
-      
-      if (!groups[monthKey]) {
-        groups[monthKey] = [];
-      }
-      groups[monthKey].push(tx);
-    });
+  const filteredTransactions = useMemo(() => {
+    const term = searchText.trim().toLocaleLowerCase();
+    return (fetchTransactions.data ?? []).filter((transaction) => {
+      if (typeFilter !== 'all' && transaction.category?.type !== typeFilter) return false;
+      if (categoryFilter && transaction.category_id !== categoryFilter) return false;
+      if (!term) return true;
+      const date = new Date(transaction.date);
+      const searchable = [
+        transaction.category?.name ?? '',
+        transaction.note ?? '',
+        transaction.amount.toFixed(2),
+        String(transaction.amount),
+        toDateKey(date),
+        `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`,
+      ].join(' ').toLocaleLowerCase();
+      return searchable.includes(term);
+    }).sort((a, b) => b.date.localeCompare(a.date));
+  }, [fetchTransactions.data, typeFilter, categoryFilter, searchText]);
 
-    // 將字典轉換成 SectionList 需要的陣列格式
-    return Object.keys(groups).map(key => ({
-      title: key,
-      data: groups[key]
-    }));
-  }, [transactions]);
+  const sections = useMemo<MonthSection[]>(() => {
+    const groups = new Map<string, Transaction[]>();
+    for (const transaction of filteredTransactions) {
+      const date = new Date(transaction.date);
+      const key = `${date.getFullYear()}年${date.getMonth() + 1}月`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(transaction);
+    }
+    return [...groups.entries()].map(([title, data]) => ({ title, data }));
+  }, [filteredTransactions]);
 
-  // 刪除按鈕的確認邏輯
-  const handleDelete = (id: string) => {
-    Alert.alert('刪除記錄', '確定要刪除這筆交易嗎？刪除後無法恢復。', [
-      { text: '取消', style: 'cancel' },
-      { 
-        text: '刪除', 
-        style: 'destructive', 
-        onPress: () => deleteTransaction.mutate(id) 
-      }
-    ]);
+  const clearFilters = () => {
+    setSearchText('');
+    setTypeFilter('all');
+    setCategoryFilter(null);
   };
 
-  if (isLoading) {
-    return (
-      <View className="flex-1 justify-center items-center bg-slate-50">
-        <ActivityIndicator size="large" color="#4f46e5" />
-      </View>
-    );
+  if (!userId || fetchTransactions.isLoading) {
+    return <View className="flex-1 items-center justify-center bg-[#F4F7F4]"><ActivityIndicator color="#477A60" /></View>;
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50">
-      <View className="flex-1 px-5 pt-4">
-        <Text className="text-3xl font-extrabold text-slate-900 tracking-tight mb-6">歷史記錄</Text>
-
-        {groupedTransactions.length === 0 ? (
-          <View className="flex-1 justify-center items-center pb-20">
-            <Text className="text-slate-400 font-medium">目前還沒有任何記錄喔！</Text>
-          </View>
-        ) : (
-          <SectionList
-            sections={groupedTransactions}
-            keyExtractor={(item) => item.id}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 100 }} // 為 Footer 預留空間
-            // 🌟 渲染月份標題
-            renderSectionHeader={({ section: { title } }) => (
-              <View className="bg-slate-50 py-2 mb-2 mt-4">
-                <Text className="text-sm font-bold text-slate-500">{title}</Text>
+    <SafeAreaView className="flex-1 bg-[#F4F7F4]" edges={['top']}>
+      <View className="flex-1 px-5 pt-5">
+        <Text className="text-3xl font-bold tracking-tight text-[#183C32]">历史记录</Text>
+        <View className="mt-2"><SyncIndicator /></View>
+        <SectionList
+          className="mt-3"
+          sections={sections}
+          keyExtractor={(item) => item.id}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingBottom: 32, flexGrow: sections.length ? 0 : 1 }}
+          ListHeaderComponent={(
+            <View className="pb-2 pt-3">
+              <View className="flex-row items-center border-b border-[#B8C9BE] px-1 py-2">
+                <Search size={18} color="#5D6D63" />
+                <TextInput
+                  className="ml-2 flex-1 py-1 text-[15px] text-[#183C32]"
+                  placeholder="搜索类别、备注、金额或日期"
+                  placeholderTextColor="#75847C"
+                  value={searchText}
+                  onChangeText={setSearchText}
+                  returnKeyType="search"
+                  accessibilityLabel="搜索交易记录"
+                />
+                {searchText.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearchText('')} className="p-1" accessibilityLabel="清除搜索">
+                    <X size={17} color="#5D6D63" />
+                  </TouchableOpacity>
+                )}
               </View>
-            )}
-            // 🌟 渲染每一筆交易卡片
-            renderItem={({ item }) => (
-              <View className="flex-row items-center bg-white p-4 rounded-2xl mb-3 shadow-sm border border-slate-100">
-                {/* 類別圖標 */}
-                <View className="bg-slate-100 p-3.5 rounded-full mr-4">
-                  {getCategoryIcon(item.category?.name || '')}
+
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-4">
+                <View className="flex-row gap-2">
+                  {([
+                    ['all', '全部'], ['expense', '支出'], ['income', '收入'],
+                  ] as Array<[TypeFilter, string]>).map(([value, label]) => (
+                    <FilterChip key={value} label={label} selected={typeFilter === value} onPress={() => { setTypeFilter(value); setCategoryFilter(null); }} />
+                  ))}
                 </View>
-                
-                {/* 文字區塊 */}
-                <View className="flex-1 pr-2">
-                  <Text className="text-base font-semibold text-slate-800">{item.category?.name}</Text>
-                  <View className="flex-row items-center mt-1">
-                    <MessageSquareText size={12} color="#94a3b8" />
-                    <Text className="text-xs text-slate-400 ml-1.5" numberOfLines={1}>
-                      {item.note || '無備註'}
-                    </Text>
+              </ScrollView>
+
+              {categories.length > 0 && (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-2">
+                  <View className="flex-row gap-2">
+                    <FilterChip label="所有类别" selected={!categoryFilter} onPress={() => setCategoryFilter(null)} />
+                    {categories.map((category) => (
+                      <FilterChip key={category.id} label={category.name} selected={categoryFilter === category.id} onPress={() => setCategoryFilter(category.id)} />
+                    ))}
                   </View>
-                </View>
-                
-                {/* 金額區塊 */}
-                <View className="items-end mr-3">
-                  <Text className={`text-lg font-bold ${item.category?.type === 'income' ? 'text-emerald-500' : 'text-rose-500'}`}>
-                    {item.category?.type === 'income' ? '+' : '-'}RM {item.amount.toFixed(2)}
-                  </Text>
-                  <Text className="text-[10px] text-slate-400 mt-1">
-                    {new Date(item.date).toLocaleDateString()}
-                  </Text>
-                </View>
+                </ScrollView>
+              )}
 
-                {/* 🌟 刪除按鈕 */}
-                <TouchableOpacity 
-                  onPress={() => handleDelete(item.id)}
-                  className="bg-rose-50 p-2.5 rounded-full border border-rose-100 active:bg-rose-100"
-                >
-                  <Trash2 size={18} color="#f43f5e" />
-                </TouchableOpacity>
-              </View>
-            )}
-          />
-        )}
+              {(searchText.length > 0 || typeFilter !== 'all' || categoryFilter) && (
+                <View className="mt-3 flex-row items-center justify-between">
+                  <Text className="text-xs text-[#5D6D63]">找到 {filteredTransactions.length} 笔</Text>
+                  <TouchableOpacity onPress={clearFilters}>
+                    <Text className="text-xs font-semibold text-[#477A60]">清除筛选</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          )}
+          renderSectionHeader={({ section }) => (
+            <View className="border-b border-[#DCE7E0] bg-[#F4F7F4] pb-2 pt-5">
+              <Text className="text-base font-bold text-[#477A60]">{section.title}</Text>
+            </View>
+          )}
+          renderItem={({ item }) => (
+            <TransactionRow transaction={item} showDate onPress={() => router.push({ pathname: '/add_transaction', params: { id: item.id } })} />
+          )}
+          ListEmptyComponent={(
+            <View className="flex-1 items-center justify-center py-16">
+              <Text className="text-lg font-semibold text-[#183C32]">{searchText || typeFilter !== 'all' || categoryFilter ? '没有符合条件的记录' : '还没有记录'}</Text>
+              <Text className="mt-2 text-sm text-[#5D6D63]">{searchText || typeFilter !== 'all' || categoryFilter ? '试试更换关键词或清除筛选。' : '新增的收支会出现在这里。'}</Text>
+            </View>
+          )}
+        />
       </View>
     </SafeAreaView>
+  );
+}
+
+function FilterChip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+  return (
+    <TouchableOpacity onPress={onPress} className={`rounded-full border px-3.5 py-2 ${selected ? 'border-[#183C32] bg-[#183C32]' : 'border-[#DCE7E0] bg-white'}`}>
+      <Text className={`text-xs font-semibold ${selected ? 'text-white' : 'text-[#5D6D63]'}`}>{label}</Text>
+    </TouchableOpacity>
   );
 }

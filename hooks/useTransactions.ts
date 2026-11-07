@@ -1,80 +1,104 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 import { supabase } from '../services/supabase';
+import {
+  addLocalCategory,
+  addLocalTransaction,
+  archiveLocalCategory,
+  deleteLocalTransaction,
+  getLocalCategories,
+  getLocalTransactions,
+  updateLocalCategory,
+  updateLocalTransaction,
+  syncUser,
+} from '../services/offlineStore';
 import { Category, Transaction } from '../type';
 
 export const useTransactions = () => {
   const queryClient = useQueryClient();
+  const [userId, setUserId] = useState<string | null>(null);
 
-  // 1. 獲取所有交易
+  useEffect(() => {
+    let active = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (active) setUserId(data.session?.user.id ?? null);
+    }).catch(() => { if (active) setUserId(null); });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUserId(session?.user.id ?? null);
+    });
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
   const fetchTransactions = useQuery({
-    queryKey: ['transactions'],
-    queryFn: async (): Promise<Transaction[]> => {
-      const { data, error } = await supabase
-        .from('transactions')
-        .select('*, category:categories(*)')
-        .order('date', { ascending: false });
-      
-      if (error) throw error;
-      return data;
-    },
+    queryKey: ['transactions', userId],
+    enabled: Boolean(userId),
+    queryFn: () => getLocalTransactions(userId!),
   });
 
-  // 2. 獲取所有類別
   const fetchCategories = useQuery({
-    queryKey: ['categories'],
-    queryFn: async (): Promise<Category[]> => {
-      const { data, error } = await supabase.from('categories').select('*');
-      if (error) throw error;
-      return data;
-    },
+    queryKey: ['categories', userId],
+    enabled: Boolean(userId),
+    queryFn: () => getLocalCategories(userId!),
   });
 
-  // 3. 新增交易
+  const invalidate = () => {
+    if (!userId) return;
+    queryClient.invalidateQueries({ queryKey: ['transactions', userId] });
+    queryClient.invalidateQueries({ queryKey: ['categories', userId] });
+    void syncUser(userId);
+  };
+
   const addTransaction = useMutation({
-    mutationFn: async (newTx: Partial<Transaction>) => {
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) throw new Error('尚未登入，無法新增紀錄');
-
-      const transactionWithUser = { ...newTx, user_id: user.id };
-      const { data, error } = await supabase.from('transactions').insert([transactionWithUser]);
-        
-      if (error) throw error;
-      return data;
+    mutationFn: async (values: Omit<Transaction, 'id' | 'user_id' | 'updated_at' | 'category'>) => {
+      if (!userId) throw new Error('请先登录后再保存记录。');
+      return addLocalTransaction(userId, values);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['transactions'] });
-    },
+    onSuccess: invalidate,
   });
 
-  // 4. 刪除交易
+  const updateTransaction = useMutation({
+    mutationFn: async (values: Partial<Transaction> & { id: string }) => {
+      if (!userId) throw new Error('请先登录后再修改记录。');
+      const { id, amount, note, date, category_id } = values;
+      return updateLocalTransaction(userId, id, { amount, note, date, category_id });
+    },
+    onSuccess: invalidate,
+  });
+
   const deleteTransaction = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('transactions').delete().eq('id', id);
-      if (error) throw error;
+      if (!userId) throw new Error('请先登录后再删除记录。');
+      return deleteLocalTransaction(userId, id);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['transactions'] });
-    },
+    onSuccess: invalidate,
   });
 
-  // ==========================================
-  // 🌟 5. 新增：修改交易
-  // ==========================================
-  const updateTransaction = useMutation({
-    mutationFn: async (updatedTx: Partial<Transaction> & { id: string }) => {
-      const { id, ...fields } = updatedTx;
-      const { data, error } = await supabase
-        .from('transactions')
-        .update(fields)
-        .eq('id', id);
-      
-      if (error) throw error;
-      return data;
+  const addCategory = useMutation({
+    mutationFn: async (values: { name: string; type: Category['type'] }) => {
+      if (!userId) throw new Error('请先登录后再新增类别。');
+      return addLocalCategory(userId, values.name, values.type);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['transactions'] });
-    },
+    onSuccess: invalidate,
   });
 
-  return { fetchTransactions, fetchCategories, addTransaction, deleteTransaction, updateTransaction };
+  const updateCategory = useMutation({
+    mutationFn: async (values: { id: string; name: string; type: Category['type'] }) => {
+      if (!userId) throw new Error('请先登录后再修改类别。');
+      return updateLocalCategory(userId, values.id, values.name, values.type);
+    },
+    onSuccess: invalidate,
+  });
+
+  const archiveCategory = useMutation({
+    mutationFn: async (id: string) => {
+      if (!userId) throw new Error('请先登录后再归档类别。');
+      return archiveLocalCategory(userId, id);
+    },
+    onSuccess: invalidate,
+  });
+
+  return { userId, fetchTransactions, fetchCategories, addTransaction, updateTransaction, deleteTransaction, addCategory, updateCategory, archiveCategory };
 };

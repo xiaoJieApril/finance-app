@@ -1,11 +1,13 @@
 import '../global.css'; // <--- 救回所有 UI 的關鍵！
 
 import { Session } from '@supabase/supabase-js';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { LogBox } from 'react-native';
+import { AppState, LogBox, Platform } from 'react-native';
 import { supabase } from '../services/supabase';
+import { getPendingCount, syncUser } from '../services/offlineStore';
+import { useSyncStore } from '../store/useSyncStore';
 
 // 隱藏不必要的樣式警告
 LogBox.ignoreLogs([
@@ -13,6 +15,44 @@ LogBox.ignoreLogs([
 ]);
 
 const queryClient = new QueryClient();
+
+function SyncCoordinator({ userId }: { userId: string | null }) {
+  const client = useQueryClient();
+
+  useEffect(() => {
+    if (!userId) return;
+    let active = true;
+    const synchronize = async () => {
+      await syncUser(userId);
+      if (active) {
+        client.invalidateQueries({ queryKey: ['transactions', userId] });
+        client.invalidateQueries({ queryKey: ['categories', userId] });
+      }
+    };
+
+    getPendingCount(userId)
+      .then((count) => { if (active) useSyncStore.getState().setPendingCount(count); })
+      .catch(() => undefined);
+    void synchronize();
+    const appStateSubscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void synchronize();
+    });
+    const browser = Platform.OS === 'web' && typeof window !== 'undefined' ? window : null;
+    browser?.addEventListener('online', synchronize);
+    const retryTimer = setInterval(async () => {
+      if ((await getPendingCount(userId).catch(() => 0)) > 0) void synchronize();
+    }, 15000);
+
+    return () => {
+      active = false;
+      clearInterval(retryTimer);
+      appStateSubscription.remove();
+      browser?.removeEventListener('online', synchronize);
+    };
+  }, [userId, client]);
+
+  return null;
+}
 
 export default function RootLayout() {
   const [session, setSession] = useState<Session | null>(null);
@@ -26,7 +66,7 @@ export default function RootLayout() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setIsInitialized(true);
-    });
+    }).catch(() => setIsInitialized(true));
 
     // 監聽後續的登入/登出動作
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -54,6 +94,7 @@ export default function RootLayout() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <SyncCoordinator userId={session?.user.id ?? null} />
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
