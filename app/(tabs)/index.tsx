@@ -11,12 +11,20 @@ const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
 
 export default function LedgerScreen() {
   const router = useRouter();
-  const { userId, fetchTransactions } = useTransactions();
+  const { userId, fetchTransactions, fetchZeroSpendDays } = useTransactions();
   const transactions = fetchTransactions.data ?? [];
+  const zeroSpendDates = useMemo(() => new Set((fetchZeroSpendDays.data ?? []).map((day) => day.local_date)), [fetchZeroSpendDays.data]);
   const [displayedMonth, setDisplayedMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1, 12));
   const [selectedDate, setSelectedDate] = useState(() => toDateKey(new Date()));
   const year = displayedMonth.getFullYear();
   const month = displayedMonth.getMonth();
+  const monthlyTotals = useMemo(() => transactions.reduce((totals, transaction) => {
+    const date = new Date(transaction.date);
+    if (date.getFullYear() !== year || date.getMonth() !== month) return totals;
+    if (transaction.category?.type === 'income') totals.income += transaction.amount;
+    if (transaction.category?.type === 'expense') totals.expense += transaction.amount;
+    return totals;
+  }, { income: 0, expense: 0 }), [transactions, year, month]);
   const calendarWeeks = useMemo(() => makeCalendarWeeks(year, month), [year, month]);
   const todayKey = toDateKey(new Date());
 
@@ -55,6 +63,24 @@ export default function LedgerScreen() {
           <View className="mt-2"><SyncIndicator /></View>
         </View>
 
+        <View className="mt-5 rounded-[22px] border border-[#DCE7E0] bg-white px-4 py-4">
+          <Text className="mb-3 text-sm font-bold text-[#183C32]">{year}年{month + 1}月收支汇总</Text>
+          <View className="flex-row">
+            <View className="flex-1 pr-2">
+              <Text className="text-[10px] font-medium text-[#5D6D63]">总收入</Text>
+              <Text className="mt-1 text-sm font-bold text-[#477A60]" numberOfLines={1}>RM {monthlyTotals.income.toFixed(2)}</Text>
+            </View>
+            <View className="flex-1 px-2">
+              <Text className="text-[10px] font-medium text-[#5D6D63]">总支出</Text>
+              <Text className="mt-1 text-sm font-bold text-[#B65C51]" numberOfLines={1}>RM {monthlyTotals.expense.toFixed(2)}</Text>
+            </View>
+            <View className="flex-1 pl-2">
+              <Text className="text-[10px] font-medium text-[#5D6D63]">结余</Text>
+              <Text className="mt-1 text-sm font-bold text-[#183C32]" numberOfLines={1}>RM {(monthlyTotals.income - monthlyTotals.expense).toFixed(2)}</Text>
+            </View>
+          </View>
+        </View>
+
         <View className="mt-6 rounded-[24px] border border-[#DCE7E0] bg-white px-3 pb-3 pt-4">
           <View className="mb-3 flex-row items-center justify-between px-1">
             <View>
@@ -82,17 +108,20 @@ export default function LedgerScreen() {
                 const isSelected = dayKey === selectedDate;
                 const isToday = dayKey === todayKey;
                 const expense = expensesByDate[dayKey] ?? 0;
+                const zeroSpend = zeroSpendDates.has(dayKey);
                 return (
                   <TouchableOpacity
                     key={dayKey}
                     onPress={() => setSelectedDate(dayKey)}
                     className={`h-[54px] flex-1 items-center justify-center rounded-xl ${isSelected ? 'bg-[#183C32]' : isToday ? 'bg-[#EAF1EC]' : ''}`}
                     accessibilityRole="button"
-                    accessibilityLabel={`${year}年${month + 1}月${day}日，支出 RM ${expense.toFixed(2)}`}
+                    accessibilityLabel={`${year}年${month + 1}月${day}日，${zeroSpend ? '零消费日' : `支出 RM ${expense.toFixed(2)}`}`}
                     accessibilityState={{ selected: isSelected }}
                   >
                     <Text className={`text-xs font-semibold ${isSelected ? 'text-white' : isToday ? 'text-[#477A60]' : 'text-[#183C32]'}`}>{day}</Text>
-                    {expense > 0 ? (
+                    {zeroSpend ? (
+                      <Text className={`mt-1 text-[9px] font-bold ${isSelected ? 'text-[#D7E979]' : 'text-[#477A60]'}`}>零消费</Text>
+                    ) : expense > 0 ? (
                       <Text className={`mt-1 text-[9px] font-semibold ${isSelected ? 'text-[#D7E979]' : 'text-[#B65C51]'}`} numberOfLines={1}>
                         {compactAmount(expense)}
                       </Text>
@@ -106,7 +135,7 @@ export default function LedgerScreen() {
 
         <View className="mb-2 mt-7 flex-row items-end justify-between">
           <View>
-            <Text className="text-xs font-semibold text-[#5D6D63]">{dateLabel} · 当天消费</Text>
+            <Text className="text-xs font-semibold text-[#5D6D63]">{dateLabel} · {zeroSpendDates.has(selectedDate) ? '零消费日' : '当天消费'}</Text>
             <Text className="mt-1 text-2xl font-bold text-[#183C32]">RM {selectedExpense.toFixed(2)}</Text>
           </View>
           {transactions.length > 0 && (
@@ -129,7 +158,7 @@ export default function LedgerScreen() {
           />
         )) : (
           <View className="border-y border-[#DCE7E0] py-6">
-            <Text className="text-sm text-[#5D6D63]">这一天没有交易记录。</Text>
+            <Text className="text-sm text-[#5D6D63]">{zeroSpendDates.has(selectedDate) ? '这一天已标记为零消费日。' : '这一天没有交易记录。'}</Text>
             <TouchableOpacity onPress={() => router.push('/add_transaction')} className="mt-4 flex-row items-center self-start rounded-full bg-[#D7E979] px-4 py-2.5">
               <Plus size={16} color="#183C32" />
               <Text className="ml-1.5 text-sm font-semibold text-[#183C32]">记一笔</Text>

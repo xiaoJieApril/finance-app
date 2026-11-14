@@ -12,6 +12,7 @@ import {
   updateLocalTransaction,
   syncUser,
 } from '../services/offlineStore';
+import { getZeroSpendDays, getZeroSpendSettings, reconcileZeroSpendDays, setZeroSpendEnabled, syncZeroSpendUser } from '../services/zeroSpendStore';
 import { Category, Transaction } from '../type';
 
 export const useTransactions = () => {
@@ -44,12 +45,42 @@ export const useTransactions = () => {
     queryFn: () => getLocalCategories(userId!),
   });
 
+  const fetchZeroSpendSettings = useQuery({
+    queryKey: ['zero-spend-settings', userId],
+    enabled: Boolean(userId),
+    queryFn: () => getZeroSpendSettings(userId!),
+  });
+
+  const fetchZeroSpendDays = useQuery({
+    queryKey: ['zero-spend-days', userId],
+    enabled: Boolean(userId),
+    queryFn: () => getZeroSpendDays(userId!),
+  });
+
   const invalidate = () => {
     if (!userId) return;
     queryClient.invalidateQueries({ queryKey: ['transactions', userId] });
     queryClient.invalidateQueries({ queryKey: ['categories', userId] });
+    void reconcileZeroSpendDays(userId).then(() => {
+      queryClient.invalidateQueries({ queryKey: ['zero-spend-days', userId] });
+      return syncZeroSpendUser(userId);
+    }).catch(() => undefined);
     void syncUser(userId);
   };
+
+  const toggleZeroSpend = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      if (!userId) throw new Error('请先登录后再修改设置。');
+      await setZeroSpendEnabled(userId, enabled);
+      if (enabled) await reconcileZeroSpendDays(userId);
+    },
+    onSuccess: () => {
+      if (!userId) return;
+      queryClient.invalidateQueries({ queryKey: ['zero-spend-settings', userId] });
+      queryClient.invalidateQueries({ queryKey: ['zero-spend-days', userId] });
+      void syncZeroSpendUser(userId).catch(() => undefined);
+    },
+  });
 
   const addTransaction = useMutation({
     mutationFn: async (values: Omit<Transaction, 'id' | 'user_id' | 'updated_at' | 'category'>) => {
@@ -100,5 +131,5 @@ export const useTransactions = () => {
     onSuccess: invalidate,
   });
 
-  return { userId, fetchTransactions, fetchCategories, addTransaction, updateTransaction, deleteTransaction, addCategory, updateCategory, archiveCategory };
+  return { userId, fetchTransactions, fetchCategories, fetchZeroSpendSettings, fetchZeroSpendDays, toggleZeroSpend, addTransaction, updateTransaction, deleteTransaction, addCategory, updateCategory, archiveCategory };
 };

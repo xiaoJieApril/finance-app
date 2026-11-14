@@ -48,6 +48,7 @@ Each transaction has exactly one category, and both rows belong to the same acco
 - Reference the core with foreign keys from the new table. For account-owned category data, use `(category_id, user_id)` so cross-account references cannot be created.
 - If a feature needs optional per-category fields, put them in a separate one-to-one extension table keyed by `(category_id, user_id)` instead of adding columns to `categories`.
 - Keep the `categories` and `transactions` entries in `type/database.ts` unchanged; append new table definitions there.
+- Auxiliary features may add account-owned tables with their own RLS policies and additive migrations. The zero-spend feature uses `zero_spend_settings` and `zero_spend_days`; neither changes ledger row semantics.
 - Keep the existing transaction/category arrays and row shapes in local storage unchanged. If a future feature changes the JSON envelope, add an explicit version migration that preserves both arrays and their records.
 
 The v1 migration adds constraints as `NOT VALID` so legacy rows remain in place; new writes and updates must satisfy the contract. Rows that do not have an account-owned category relationship remain stored but are excluded from the new account-scoped ledger query. Before applying the migrations, check the existing Supabase column types against this document. Do not edit the v1 migrations after applying them; future changes belong in a new migration.

@@ -1,4 +1,5 @@
-import { Archive, LogOut, Plus, X } from 'lucide-react-native';
+import { Archive, LogOut, Plus, Settings, X } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,6 +9,7 @@ import { supabase } from '../../services/supabase';
 import { Category } from '../../type';
 
 export default function CategoriesScreen() {
+  const router = useRouter();
   const { userId, fetchCategories, addCategory, updateCategory, archiveCategory } = useTransactions();
   const [modalVisible, setModalVisible] = useState(false);
   const [editing, setEditing] = useState<Category | null>(null);
@@ -148,6 +150,10 @@ export default function CategoriesScreen() {
         <TouchableOpacity activeOpacity={1} onPress={() => setMenuVisible(false)} className="flex-1 justify-end bg-black/35">
           <View className="rounded-t-[28px] bg-[#F4F7F4] p-5 pb-9">
             <Text className="mb-4 text-lg font-bold text-[#183C32]">账户</Text>
+            <TouchableOpacity onPress={() => { setMenuVisible(false); router.push('/settings'); }} className="mb-3 flex-row items-center rounded-2xl bg-[#EAF1EC] p-4">
+              <Settings size={19} color="#183C32" />
+              <Text className="ml-3 font-semibold text-[#183C32]">设置</Text>
+            </TouchableOpacity>
             <TouchableOpacity onPress={confirmSignOut} disabled={signingOut} className="flex-row items-center rounded-2xl bg-[#F6E9E6] p-4">
               <LogOut size={19} color="#B65C51" />
               <Text className="ml-3 font-semibold text-[#B65C51]">{signingOut ? '正在退出' : '退出登录'}</Text>

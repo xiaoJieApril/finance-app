@@ -7,13 +7,15 @@ import { SyncIndicator, TransactionRow } from '../../components/ledger';
 import { useTransactions } from '../../hooks/useTransactions';
 import { toDateKey } from '../../services/dateUtils';
 import { Category, Transaction } from '../../type';
+import { ZeroSpendDay } from '../../services/zeroSpendStore';
 
-type MonthSection = { title: string; data: Transaction[] };
+type HistoryItem = { kind: 'transaction'; transaction: Transaction } | { kind: 'zero-spend'; day: ZeroSpendDay };
+type MonthSection = { title: string; data: HistoryItem[] };
 type TypeFilter = 'all' | Category['type'];
 
 export default function HistoryScreen() {
   const router = useRouter();
-  const { userId, fetchTransactions, fetchCategories } = useTransactions();
+  const { userId, fetchTransactions, fetchCategories, fetchZeroSpendDays } = useTransactions();
   const [searchText, setSearchText] = useState('');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
@@ -39,15 +41,35 @@ export default function HistoryScreen() {
   }, [fetchTransactions.data, typeFilter, categoryFilter, searchText]);
 
   const sections = useMemo<MonthSection[]>(() => {
-    const groups = new Map<string, Transaction[]>();
+    const groups = new Map<string, HistoryItem[]>();
     for (const transaction of filteredTransactions) {
       const date = new Date(transaction.date);
       const key = `${date.getFullYear()}年${date.getMonth() + 1}月`;
       if (!groups.has(key)) groups.set(key, []);
-      groups.get(key)!.push(transaction);
+      groups.get(key)!.push({ kind: 'transaction', transaction });
     }
-    return [...groups.entries()].map(([title, data]) => ({ title, data }));
-  }, [filteredTransactions]);
+    const term = searchText.trim().toLocaleLowerCase();
+    for (const day of fetchZeroSpendDays.data ?? []) {
+      if (typeFilter !== 'all' || categoryFilter) continue;
+      const date = new Date(`${day.local_date}T12:00:00`);
+      const dateLabel = `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+      if (term && !day.local_date.includes(term) && !dateLabel.includes(term) && !'零消费'.includes(term)) continue;
+      const key = `${date.getFullYear()}年${date.getMonth() + 1}月`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push({ kind: 'zero-spend', day });
+    }
+    for (const group of groups.values()) group.sort((a, b) => {
+      const dateA = a.kind === 'transaction' ? new Date(a.transaction.date).getTime() : new Date(`${a.day.local_date}T12:00:00`).getTime();
+      const dateB = b.kind === 'transaction' ? new Date(b.transaction.date).getTime() : new Date(`${b.day.local_date}T12:00:00`).getTime();
+      return dateB - dateA;
+    });
+    return [...groups.entries()]
+      .map(([title, data]) => ({ title, data }))
+      .sort((a, b) => {
+        const firstDate = (item: HistoryItem) => item.kind === 'transaction' ? new Date(item.transaction.date).getTime() : new Date(`${item.day.local_date}T12:00:00`).getTime();
+        return firstDate(b.data[0]) - firstDate(a.data[0]);
+      });
+  }, [filteredTransactions, fetchZeroSpendDays.data, typeFilter, categoryFilter, searchText]);
 
   const clearFilters = () => {
     setSearchText('');
@@ -67,7 +89,7 @@ export default function HistoryScreen() {
         <SectionList
           className="mt-3"
           sections={sections}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item.kind === 'transaction' ? item.transaction.id : `zero-${item.day.local_date}`}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingBottom: 32, flexGrow: sections.length ? 0 : 1 }}
@@ -114,7 +136,7 @@ export default function HistoryScreen() {
 
               {(searchText.length > 0 || typeFilter !== 'all' || categoryFilter) && (
                 <View className="mt-3 flex-row items-center justify-between">
-                  <Text className="text-xs text-[#5D6D63]">找到 {filteredTransactions.length} 笔</Text>
+                  <Text className="text-xs text-[#5D6D63]">找到 {sections.reduce((total, section) => total + section.data.length, 0)} 条记录</Text>
                   <TouchableOpacity onPress={clearFilters}>
                     <Text className="text-xs font-semibold text-[#477A60]">清除筛选</Text>
                   </TouchableOpacity>
@@ -127,8 +149,13 @@ export default function HistoryScreen() {
               <Text className="text-base font-bold text-[#477A60]">{section.title}</Text>
             </View>
           )}
-          renderItem={({ item }) => (
-            <TransactionRow transaction={item} showDate onPress={() => router.push({ pathname: '/add_transaction', params: { id: item.id } })} />
+          renderItem={({ item }) => item.kind === 'transaction' ? (
+            <TransactionRow transaction={item.transaction} showDate onPress={() => router.push({ pathname: '/add_transaction', params: { id: item.transaction.id } })} />
+          ) : (
+            <View className="ml-2 flex-row items-center border-l border-[#DCE7E0] py-3.5 pl-4">
+              <View className="mr-3 h-10 w-10 items-center justify-center rounded-full bg-[#EAF1EC]"><Text className="text-xs font-bold text-[#477A60]">0</Text></View>
+              <View className="flex-1"><Text className="text-[15px] font-semibold text-[#183C32]">零消费日</Text><Text className="mt-1 text-xs text-[#5D6D63]">{item.day.local_date} · 全天没有交易记录</Text></View>
+            </View>
           )}
           ListEmptyComponent={(
             <View className="flex-1 items-center justify-center py-16">

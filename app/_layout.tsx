@@ -8,6 +8,8 @@ import { AppState, LogBox, Platform } from 'react-native';
 import { supabase } from '../services/supabase';
 import { getPendingCount, syncUser } from '../services/offlineStore';
 import { useSyncStore } from '../store/useSyncStore';
+import { getZeroSpendPendingCount, reconcileZeroSpendDays, syncZeroSpendUser } from '../services/zeroSpendStore';
+import { registerZeroSpendBackgroundTask } from '../services/zeroSpendBackground';
 
 // 隱藏不必要的樣式警告
 LogBox.ignoreLogs([
@@ -22,11 +24,22 @@ function SyncCoordinator({ userId }: { userId: string | null }) {
   useEffect(() => {
     if (!userId) return;
     let active = true;
+    void registerZeroSpendBackgroundTask().catch(() => undefined);
     const synchronize = async () => {
       await syncUser(userId);
+      await reconcileZeroSpendDays(userId).catch(() => undefined);
+      try {
+        await syncZeroSpendUser(userId);
+        await reconcileZeroSpendDays(userId);
+        await syncZeroSpendUser(userId);
+      } catch {
+        // Keep local marker generation available while offline; pending changes sync later.
+      }
       if (active) {
         client.invalidateQueries({ queryKey: ['transactions', userId] });
         client.invalidateQueries({ queryKey: ['categories', userId] });
+        client.invalidateQueries({ queryKey: ['zero-spend-settings', userId] });
+        client.invalidateQueries({ queryKey: ['zero-spend-days', userId] });
       }
     };
 
@@ -40,12 +53,25 @@ function SyncCoordinator({ userId }: { userId: string | null }) {
     const browser = Platform.OS === 'web' && typeof window !== 'undefined' ? window : null;
     browser?.addEventListener('online', synchronize);
     const retryTimer = setInterval(async () => {
-      if ((await getPendingCount(userId).catch(() => 0)) > 0) void synchronize();
+      const pending = await Promise.all([getPendingCount(userId).catch(() => 0), getZeroSpendPendingCount(userId).catch(() => 0)]);
+      if (pending.some((count) => count > 0)) void synchronize();
     }, 15000);
+    let midnightTimer: ReturnType<typeof setTimeout>;
+    const scheduleMidnightCheck = () => {
+      clearTimeout(midnightTimer);
+      const now = new Date();
+      const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      midnightTimer = setTimeout(() => {
+        void synchronize();
+        scheduleMidnightCheck();
+      }, Math.max(1000, nextMidnight.getTime() - now.getTime() + 1000));
+    };
+    scheduleMidnightCheck();
 
     return () => {
       active = false;
       clearInterval(retryTimer);
+      clearTimeout(midnightTimer);
       appStateSubscription.remove();
       browser?.removeEventListener('online', synchronize);
     };
@@ -98,6 +124,7 @@ export default function RootLayout() {
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
+        <Stack.Screen name="settings" options={{ headerShown: false }} />
       </Stack>
     </QueryClientProvider>
   );
