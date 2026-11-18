@@ -3,6 +3,7 @@ import '../global.css'; // <--- 救回所有 UI 的關鍵！
 import { Session } from '@supabase/supabase-js';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { Stack, useRouter, useSegments } from 'expo-router';
+import * as Updates from 'expo-updates';
 import React, { useEffect, useState } from 'react';
 import { AppState, LogBox, Platform } from 'react-native';
 import { supabase } from '../services/supabase';
@@ -17,6 +18,17 @@ LogBox.ignoreLogs([
 ]);
 
 const queryClient = new QueryClient();
+
+function AutoUpdateReloader() {
+  const { isUpdatePending } = Updates.useUpdates();
+
+  useEffect(() => {
+    if (Platform.OS === 'web' || __DEV__ || !Updates.isEnabled || !isUpdatePending) return;
+    void Updates.reloadAsync().catch(() => undefined);
+  }, [isUpdatePending]);
+
+  return null;
+}
 
 function SyncCoordinator({ userId }: { userId: string | null }) {
   const client = useQueryClient();
@@ -120,6 +132,7 @@ export default function RootLayout() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <AutoUpdateReloader />
       <SyncCoordinator userId={session?.user.id ?? null} />
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
