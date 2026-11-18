@@ -1,4 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { ChevronLeft, Trash2 } from 'lucide-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -22,6 +23,16 @@ export default function AddTransactionScreen() {
   const currentTransaction = useMemo(() => fetchTransactions.data?.find((item) => item.id === id), [fetchTransactions.data, id]);
   const categories = (fetchCategories.data ?? []).filter((category) => !category.archived_at && category.type === type);
   const isSaving = addTransaction.isPending || updateTransaction.isPending || deleteTransaction.isPending;
+
+  useFocusEffect(React.useCallback(() => {
+    if (!editing) {
+      setAmount('');
+      setNote('');
+      setDate(toDateKey(new Date()));
+      setCategoryId('');
+      setType('expense');
+    }
+  }, [editing]));
 
   useEffect(() => {
     if (!currentTransaction) return;

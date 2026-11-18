@@ -2,7 +2,7 @@
   "expo": {
     "name": "finance-app",
     "slug": "finance-app",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "financeapp",
@@ -45,6 +45,14 @@
       "expo-web-browser",
       "expo-background-task"
     ],
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/0fb606b1-7c4c-4407-a733-c7ce54255d4b",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true

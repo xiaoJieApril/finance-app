@@ -1,7 +1,9 @@
 import { ArrowRight, ChevronLeft, ChevronRight, Plus } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
-import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SyncIndicator, TransactionRow } from '../../components/ledger';
 import { useTransactions } from '../../hooks/useTransactions';
@@ -16,6 +18,8 @@ export default function LedgerScreen() {
   const zeroSpendDates = useMemo(() => new Set((fetchZeroSpendDays.data ?? []).map((day) => day.local_date)), [fetchZeroSpendDays.data]);
   const [displayedMonth, setDisplayedMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1, 12));
   const [selectedDate, setSelectedDate] = useState(() => toDateKey(new Date()));
+  const [summaryPeriod, setSummaryPeriod] = useState<'month' | 'year'>('month');
+  const [showReleaseNotes, setShowReleaseNotes] = useState(false);
   const year = displayedMonth.getFullYear();
   const month = displayedMonth.getMonth();
   const monthlyTotals = useMemo(() => transactions.reduce((totals, transaction) => {
@@ -25,6 +29,27 @@ export default function LedgerScreen() {
     if (transaction.category?.type === 'expense') totals.expense += transaction.amount;
     return totals;
   }, { income: 0, expense: 0 }), [transactions, year, month]);
+  const yearlyTotals = useMemo(() => transactions.reduce((totals, transaction) => {
+    if (new Date(transaction.date).getFullYear() !== year) return totals;
+    if (transaction.category?.type === 'income') totals.income += transaction.amount;
+    if (transaction.category?.type === 'expense') totals.expense += transaction.amount;
+    return totals;
+  }, { income: 0, expense: 0 }), [transactions, year]);
+  const summaryTotals = summaryPeriod === 'month' ? monthlyTotals : yearlyTotals;
+  const appVersion = Constants.expoConfig?.version ?? '1.0.2';
+
+  useEffect(() => {
+    let active = true;
+    AsyncStorage.getItem('finance-app-dismissed-release-version').then((dismissedVersion) => {
+      if (active && dismissedVersion !== appVersion) setShowReleaseNotes(true);
+    }).catch(() => { if (active) setShowReleaseNotes(true); });
+    return () => { active = false; };
+  }, [appVersion]);
+
+  const dismissReleaseNotes = async () => {
+    setShowReleaseNotes(false);
+    await AsyncStorage.setItem('finance-app-dismissed-release-version', appVersion).catch(() => undefined);
+  };
   const calendarWeeks = useMemo(() => makeCalendarWeeks(year, month), [year, month]);
   const todayKey = toDateKey(new Date());
 
@@ -64,19 +89,24 @@ export default function LedgerScreen() {
         </View>
 
         <View className="mt-5 rounded-[22px] border border-[#DCE7E0] bg-white px-4 py-4">
-          <Text className="mb-3 text-sm font-bold text-[#183C32]">{year}年{month + 1}月收支汇总</Text>
+          <View className="mb-3 flex-row items-center justify-between">
+            <Text className="text-sm font-bold text-[#183C32]">{summaryPeriod === 'month' ? `${year}年${month + 1}月` : `${year}年`}收支汇总</Text>
+            <View className="flex-row rounded-full bg-[#EAF1EC] p-0.5">
+              {(['month', 'year'] as const).map((period) => <TouchableOpacity key={period} onPress={() => setSummaryPeriod(period)} className={`rounded-full px-3 py-1.5 ${summaryPeriod === period ? 'bg-[#183C32]' : ''}`}><Text className={`text-[10px] font-semibold ${summaryPeriod === period ? 'text-white' : 'text-[#5D6D63]'}`}>{period === 'month' ? '月' : '年'}</Text></TouchableOpacity>)}
+            </View>
+          </View>
           <View className="flex-row">
             <View className="flex-1 pr-2">
               <Text className="text-[10px] font-medium text-[#5D6D63]">总收入</Text>
-              <Text className="mt-1 text-sm font-bold text-[#477A60]" numberOfLines={1}>RM {monthlyTotals.income.toFixed(2)}</Text>
+              <Text className="mt-1 text-sm font-bold text-[#477A60]" numberOfLines={1}>RM {summaryTotals.income.toFixed(2)}</Text>
             </View>
             <View className="flex-1 px-2">
               <Text className="text-[10px] font-medium text-[#5D6D63]">总支出</Text>
-              <Text className="mt-1 text-sm font-bold text-[#B65C51]" numberOfLines={1}>RM {monthlyTotals.expense.toFixed(2)}</Text>
+              <Text className="mt-1 text-sm font-bold text-[#B65C51]" numberOfLines={1}>RM {summaryTotals.expense.toFixed(2)}</Text>
             </View>
             <View className="flex-1 pl-2">
               <Text className="text-[10px] font-medium text-[#5D6D63]">结余</Text>
-              <Text className="mt-1 text-sm font-bold text-[#183C32]" numberOfLines={1}>RM {(monthlyTotals.income - monthlyTotals.expense).toFixed(2)}</Text>
+              <Text className="mt-1 text-sm font-bold text-[#183C32]" numberOfLines={1}>RM {(summaryTotals.income - summaryTotals.expense).toFixed(2)}</Text>
             </View>
           </View>
         </View>
@@ -166,6 +196,18 @@ export default function LedgerScreen() {
           </View>
         )}
       </ScrollView>
+      <Modal visible={showReleaseNotes} transparent animationType="fade" onRequestClose={dismissReleaseNotes}>
+        <View className="flex-1 items-center justify-center bg-black/40 px-6">
+          <View className="w-full rounded-[24px] bg-white p-6">
+            <Text className="text-xs font-bold tracking-widest text-[#477A60]">VERSION {appVersion}</Text>
+            <Text className="mb-4 mt-2 text-2xl font-bold text-[#183C32]">本次更新</Text>
+            <Text className="mb-2 text-sm leading-6 text-[#5D6D63]">• 新增月度与年度收支汇总切换</Text>
+            <Text className="mb-2 text-sm leading-6 text-[#5D6D63]">• 新建交易时会重置表单，避免沿用上次输入</Text>
+            <Text className="mb-6 text-sm leading-6 text-[#5D6D63]">• 优化主页体验</Text>
+            <TouchableOpacity onPress={dismissReleaseNotes} className="items-center rounded-full bg-[#183C32] py-3.5"><Text className="font-bold text-white">知道了</Text></TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
