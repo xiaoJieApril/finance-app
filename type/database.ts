@@ -83,6 +83,27 @@ export type Database = {
         Update: { id?: string; local_date?: string; created_at?: string; deleted_at?: string | null };
         Relationships: [];
       };
+      planned_expenses: {
+        Row: { id: string; user_id: string; month: string; title: string; amount: number; category_id: string; updated_at: string; deleted_at: string | null };
+        Insert: { id: string; user_id: string; month: string; title: string; amount: number; category_id: string; updated_at?: string; deleted_at?: string | null };
+        Update: { month?: string; title?: string; amount?: number; category_id?: string; updated_at?: string; deleted_at?: string | null };
+        Relationships: [{ foreignKeyName: 'planned_expenses_category_user_id_fkey'; columns: ['category_id', 'user_id']; isOneToOne: false; referencedRelation: 'categories'; referencedColumns: ['id', 'user_id'] }];
+      };
+      planned_expense_transactions: {
+        Row: { id: string; user_id: string; planned_expense_id: string; transaction_id: string; updated_at: string; deleted_at: string | null };
+        Insert: { id: string; user_id: string; planned_expense_id: string; transaction_id: string; updated_at?: string; deleted_at?: string | null };
+        Update: { planned_expense_id?: string; transaction_id?: string; updated_at?: string; deleted_at?: string | null };
+        Relationships: [
+          { foreignKeyName: 'planned_expense_transactions_plan_user_id_fkey'; columns: ['planned_expense_id', 'user_id']; isOneToOne: false; referencedRelation: 'planned_expenses'; referencedColumns: ['id', 'user_id'] },
+          { foreignKeyName: 'planned_expense_transactions_transaction_user_id_fkey'; columns: ['transaction_id']; isOneToOne: false; referencedRelation: 'transactions'; referencedColumns: ['id'] }
+        ];
+      };
+      financial_goals: {
+        Row: { user_id: string; kind: 'investment' | 'emergency_fund'; balance: number; target: number | null; updated_at: string };
+        Insert: { user_id: string; kind: 'investment' | 'emergency_fund'; balance?: number; target?: number | null; updated_at?: string };
+        Update: { balance?: number; target?: number | null; updated_at?: string };
+        Relationships: [];
+      };
     };
     Views: { [_ in never]: never };
     Functions: { [_ in never]: never };

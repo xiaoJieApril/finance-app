@@ -11,6 +11,7 @@ import { getPendingCount, syncUser } from '../services/offlineStore';
 import { useSyncStore } from '../store/useSyncStore';
 import { getZeroSpendPendingCount, reconcileZeroSpendDays, syncZeroSpendUser } from '../services/zeroSpendStore';
 import { registerZeroSpendBackgroundTask } from '../services/zeroSpendBackground';
+import { getPlanningPendingCount, syncPlanningUser } from '../services/planningStore';
 
 // 隱藏不必要的樣式警告
 LogBox.ignoreLogs([
@@ -39,6 +40,7 @@ function SyncCoordinator({ userId }: { userId: string | null }) {
     void registerZeroSpendBackgroundTask().catch(() => undefined);
     const synchronize = async () => {
       await syncUser(userId);
+      await syncPlanningUser(userId);
       await reconcileZeroSpendDays(userId).catch(() => undefined);
       try {
         await syncZeroSpendUser(userId);
@@ -52,6 +54,7 @@ function SyncCoordinator({ userId }: { userId: string | null }) {
         client.invalidateQueries({ queryKey: ['categories', userId] });
         client.invalidateQueries({ queryKey: ['zero-spend-settings', userId] });
         client.invalidateQueries({ queryKey: ['zero-spend-days', userId] });
+        client.invalidateQueries({ queryKey: ['planning', userId] });
       }
     };
 
@@ -65,7 +68,7 @@ function SyncCoordinator({ userId }: { userId: string | null }) {
     const browser = Platform.OS === 'web' && typeof window !== 'undefined' ? window : null;
     browser?.addEventListener('online', synchronize);
     const retryTimer = setInterval(async () => {
-      const pending = await Promise.all([getPendingCount(userId).catch(() => 0), getZeroSpendPendingCount(userId).catch(() => 0)]);
+      const pending = await Promise.all([getPendingCount(userId).catch(() => 0), getZeroSpendPendingCount(userId).catch(() => 0), getPlanningPendingCount(userId).catch(() => 0)]);
       if (pending.some((count) => count > 0)) void synchronize();
     }, 15000);
     let midnightTimer: ReturnType<typeof setTimeout>;

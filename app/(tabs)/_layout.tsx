@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 import { useRouter } from 'expo-router';
-import { BookOpenText, FolderOpen, Home, Plus } from 'lucide-react-native';
+import { BookOpenText, FolderOpen, Home, Plus, WalletCards } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
@@ -18,6 +18,7 @@ export default function TabLayout() {
       <Tabs.Screen name="history" options={{ title: '历史', tabBarIcon: ({ color }) => <BookOpenText size={21} color={color} strokeWidth={1.8} /> }} />
       <Tabs.Screen name="add_transaction" options={{ title: '记账', href: null }} />
       <Tabs.Screen name="categories" options={{ title: '类别', tabBarIcon: ({ color }) => <FolderOpen size={21} color={color} strokeWidth={1.8} /> }} />
+      <Tabs.Screen name="planning" options={{ title: '计划', tabBarIcon: ({ color }) => <WalletCards size={21} color={color} strokeWidth={1.8} /> }} />
     </Tabs>
   );
 }
@@ -27,9 +28,9 @@ function LedgerTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const currentRoute = state.routes[state.index];
   if (currentRoute?.name === 'add_transaction') return null;
-  const routes = state.routes.filter((route) => ['index', 'history', 'categories'].includes(route.name));
-  const leftRoutes = routes.filter((route) => route.name !== 'categories');
-  const categoryRoute = routes.find((route) => route.name === 'categories');
+  const routes = state.routes.filter((route) => ['index', 'history', 'categories', 'planning'].includes(route.name));
+  const leftRoutes = routes.filter((route) => ['index', 'history'].includes(route.name));
+  const rightRoutes = routes.filter((route) => ['categories', 'planning'].includes(route.name));
 
   const renderRoute = (route: typeof routes[number]) => {
     const options = descriptors[route.key].options;
@@ -63,7 +64,7 @@ function LedgerTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
           <Plus size={25} color="#183C32" strokeWidth={2.2} />
         </View>
       </Pressable>
-      <View className="flex-1">{categoryRoute ? renderRoute(categoryRoute) : null}</View>
+      <View className="flex-1 flex-row">{rightRoutes.map(renderRoute)}</View>
     </View>
   );
 }
