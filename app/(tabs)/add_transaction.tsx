@@ -90,8 +90,8 @@ export default function AddTransactionScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-[#F4F7F4]" edges={['top']}>
-      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView className="flex-1 px-5" contentContainerStyle={{ paddingBottom: 32 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView className="flex-1 px-5" contentContainerStyle={{ paddingBottom: 32 }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets showsVerticalScrollIndicator={false}>
           <View className="flex-row items-center justify-between py-4">
             <TouchableOpacity onPress={() => router.back()} className="h-10 w-10 items-center justify-center rounded-full bg-[#EAF1EC]" accessibilityLabel="返回">
               <ChevronLeft size={22} color="#183C32" />

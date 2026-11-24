@@ -1,7 +1,7 @@
 import { Archive, LogOut, Plus, Settings, X } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SyncIndicator } from '../../components/ledger';
 import { useTransactions } from '../../hooks/useTransactions';
@@ -113,7 +113,14 @@ export default function CategoriesScreen() {
       </ScrollView>
 
       <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={() => setModalVisible(false)}>
-        <View className="flex-1 justify-end bg-black/35">
+        <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <View className="flex-1 justify-end bg-black/35">
+          <ScrollView
+            className="max-h-[90%]"
+            contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}
+            keyboardShouldPersistTaps="handled"
+            automaticallyAdjustKeyboardInsets
+          >
           <View className="rounded-t-[28px] bg-[#F4F7F4] px-5 pb-10 pt-5">
             <View className="mb-5 flex-row items-center justify-between">
               <Text className="text-xl font-bold text-[#183C32]">{editing ? '修改类别名称' : '新增类别'}</Text>
@@ -143,7 +150,9 @@ export default function CategoriesScreen() {
               <Text className="font-bold text-white">保存类别</Text>
             </TouchableOpacity>
           </View>
+          </ScrollView>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal visible={menuVisible} transparent animationType="fade" onRequestClose={() => setMenuVisible(false)}>

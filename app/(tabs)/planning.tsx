@@ -1,6 +1,6 @@
 import { ChevronLeft, ChevronRight, Plus, TrendingUp, Wallet, X } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SyncIndicator } from '../../components/ledger';
 import { useTransactions } from '../../hooks/useTransactions';
@@ -101,10 +101,42 @@ export default function PlanningScreen() {
       {goalCard('investment')}{goalCard('emergency_fund')}
     </ScrollView>
 
-    <Modal visible={planModal} transparent animationType="slide" onRequestClose={() => setPlanModal(false)}><View className="flex-1 justify-end bg-black/35"><View className="max-h-[85%] rounded-t-[28px] bg-[#F4F7F4] px-5 pb-10 pt-5"><View className="mb-5 flex-row items-center justify-between"><Text className="text-xl font-bold text-[#183C32]">{editing ? '编辑预期支出' : '新增预期支出'}</Text><TouchableOpacity onPress={() => setPlanModal(false)} className="h-9 w-9 items-center justify-center rounded-full bg-[#E7EEE9]"><X size={19} color="#183C32" /></TouchableOpacity></View><Text className="mb-1 text-xs font-semibold text-[#5D6D63]">用途</Text><TextInput value={title} onChangeText={setTitle} placeholder="例如：周末短途旅行" placeholderTextColor="#87958D" maxLength={60} className="mb-4 border-b border-[#B8C9BE] py-3 text-base text-[#183C32]"/><Text className="mb-1 text-xs font-semibold text-[#5D6D63]">预估金额（RM）</Text><TextInput value={amount} onChangeText={setAmount} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor="#87958D" className="mb-5 border-b border-[#B8C9BE] py-3 text-base text-[#183C32]"/><Text className="mb-2 text-xs font-semibold text-[#5D6D63]">支出类别</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-6"><View className="flex-row gap-2">{categories.map((category: Category) => <TouchableOpacity key={category.id} onPress={() => setCategoryId(category.id)} className={`rounded-full border px-3.5 py-2.5 ${categoryId === category.id ? 'border-[#183C32] bg-[#183C32]' : 'border-[#DCE7E0] bg-white'}`}><Text className={`text-xs font-semibold ${categoryId === category.id ? 'text-white' : 'text-[#5D6D63]'}`}>{category.name}</Text></TouchableOpacity>)}</View></ScrollView><TouchableOpacity onPress={save} disabled={savePlan.isPending || categories.length === 0} className="items-center rounded-full bg-[#183C32] py-4"><Text className="font-bold text-white">保存计划</Text></TouchableOpacity></View></View></Modal>
+    <Modal visible={planModal} transparent animationType="slide" onRequestClose={() => setPlanModal(false)}>
+      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <View className="flex-1 justify-end bg-black/35">
+          <ScrollView className="max-h-[92%]" contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
+            <View className="rounded-t-[28px] bg-[#F4F7F4] px-5 pb-10 pt-5">
+              <View className="mb-5 flex-row items-center justify-between"><Text className="text-xl font-bold text-[#183C32]">{editing ? '编辑预期支出' : '新增预期支出'}</Text><TouchableOpacity onPress={() => setPlanModal(false)} className="h-9 w-9 items-center justify-center rounded-full bg-[#E7EEE9]"><X size={19} color="#183C32" /></TouchableOpacity></View>
+              <Text className="mb-1 text-xs font-semibold text-[#5D6D63]">用途</Text>
+              <TextInput value={title} onChangeText={setTitle} placeholder="例如：周末短途旅行" placeholderTextColor="#87958D" maxLength={60} className="mb-4 border-b border-[#B8C9BE] py-3 text-base text-[#183C32]" />
+              <Text className="mb-1 text-xs font-semibold text-[#5D6D63]">预估金额（RM）</Text>
+              <TextInput value={amount} onChangeText={setAmount} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor="#87958D" className="mb-5 border-b border-[#B8C9BE] py-3 text-base text-[#183C32]" />
+              <Text className="mb-2 text-xs font-semibold text-[#5D6D63]">支出类别</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-6" keyboardShouldPersistTaps="handled"><View className="flex-row gap-2">{categories.map((category: Category) => <TouchableOpacity key={category.id} onPress={() => setCategoryId(category.id)} className={`rounded-full border px-3.5 py-2.5 ${categoryId === category.id ? 'border-[#183C32] bg-[#183C32]' : 'border-[#DCE7E0] bg-white'}`}><Text className={`text-xs font-semibold ${categoryId === category.id ? 'text-white' : 'text-[#5D6D63]'}`}>{category.name}</Text></TouchableOpacity>)}</View></ScrollView>
+              <TouchableOpacity onPress={save} disabled={savePlan.isPending || categories.length === 0} className="items-center rounded-full bg-[#183C32] py-4"><Text className="font-bold text-white">保存计划</Text></TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
 
     <Modal visible={Boolean(linkPlanId)} transparent animationType="slide" onRequestClose={() => setLinkPlanId(null)}><View className="flex-1 justify-end bg-black/35"><View className="max-h-[78%] rounded-t-[28px] bg-[#F4F7F4] px-5 pb-10 pt-5"><View className="mb-4 flex-row items-center justify-between"><View><Text className="text-xl font-bold text-[#183C32]">关联实际支出</Text><Text className="mt-1 text-xs text-[#5D6D63]">选择一笔支出加入这个计划</Text></View><TouchableOpacity onPress={() => setLinkPlanId(null)} className="h-9 w-9 items-center justify-center rounded-full bg-[#E7EEE9]"><X size={19} color="#183C32" /></TouchableOpacity></View><ScrollView>{transactions.filter((transaction) => !transaction.deleted_at && transaction.category?.type === 'expense').sort((a,b) => b.date.localeCompare(a.date)).map((transaction) => { const relation = links.find((item) => item.transaction_id === transaction.id); const isLinkedHere = relation?.planned_expense_id === linkPlanId; const plan = plans.find((item) => item.id === relation?.planned_expense_id); return <TouchableOpacity key={transaction.id} onPress={() => void changeLink(transaction.id, isLinkedHere ? relation?.id : undefined)} className="flex-row items-center border-b border-[#DCE7E0] py-3.5"><View className="flex-1"><Text className="text-sm font-semibold text-[#183C32]">{transaction.note || transaction.category?.name || '支出'}</Text><Text className="mt-1 text-xs text-[#5D6D63]">{transaction.date.slice(0,10)}{relation && !isLinkedHere ? ` · 已关联${plan ? `「${plan.title}」` : '其他计划'}，点此转移` : ''}</Text></View><Text className={`font-bold ${isLinkedHere ? 'text-[#477A60]' : 'text-[#183C32]'}`}>{isLinkedHere ? '已关联 · ' : ''}{money(transaction.amount)}</Text></TouchableOpacity>; })}{transactions.filter((transaction) => !transaction.deleted_at && transaction.category?.type === 'expense').length === 0 && <Text className="py-8 text-center text-sm text-[#5D6D63]">还没有可关联的支出交易。</Text>}</ScrollView></View></View></Modal>
 
-    <Modal visible={Boolean(goalKind)} transparent animationType="slide" onRequestClose={() => setGoalKind(null)}><View className="flex-1 justify-end bg-black/35"><View className="rounded-t-[28px] bg-[#F4F7F4] px-5 pb-10 pt-5"><View className="mb-5 flex-row items-center justify-between"><Text className="text-xl font-bold text-[#183C32]">更新{goalKind === 'investment' ? '投资' : '紧急储蓄'}</Text><TouchableOpacity onPress={() => setGoalKind(null)} className="h-9 w-9 items-center justify-center rounded-full bg-[#E7EEE9]"><X size={19} color="#183C32" /></TouchableOpacity></View><Text className="mb-1 text-xs font-semibold text-[#5D6D63]">当前金额（RM）</Text><TextInput value={balanceInput} onChangeText={setBalanceInput} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor="#87958D" className="mb-5 border-b border-[#B8C9BE] py-3 text-base text-[#183C32]"/><Text className="mb-1 text-xs font-semibold text-[#5D6D63]">目标金额（RM，可留空）</Text><TextInput value={targetInput} onChangeText={setTargetInput} keyboardType="decimal-pad" placeholder="未设置目标" placeholderTextColor="#87958D" className="mb-6 border-b border-[#B8C9BE] py-3 text-base text-[#183C32]"/><TouchableOpacity onPress={saveGoal} disabled={updateGoal.isPending} className="items-center rounded-full bg-[#183C32] py-4"><Text className="font-bold text-white">保存金额</Text></TouchableOpacity></View></View></Modal>
+    <Modal visible={Boolean(goalKind)} transparent animationType="slide" onRequestClose={() => setGoalKind(null)}>
+      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <View className="flex-1 justify-end bg-black/35">
+          <ScrollView className="max-h-[92%]" contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
+            <View className="rounded-t-[28px] bg-[#F4F7F4] px-5 pb-10 pt-5">
+              <View className="mb-5 flex-row items-center justify-between"><Text className="text-xl font-bold text-[#183C32]">更新{goalKind === 'investment' ? '投资' : '紧急储蓄'}</Text><TouchableOpacity onPress={() => setGoalKind(null)} className="h-9 w-9 items-center justify-center rounded-full bg-[#E7EEE9]"><X size={19} color="#183C32" /></TouchableOpacity></View>
+              <Text className="mb-1 text-xs font-semibold text-[#5D6D63]">当前金额（RM）</Text>
+              <TextInput value={balanceInput} onChangeText={setBalanceInput} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor="#87958D" className="mb-5 border-b border-[#B8C9BE] py-3 text-base text-[#183C32]" />
+              <Text className="mb-1 text-xs font-semibold text-[#5D6D63]">目标金额（RM，可留空）</Text>
+              <TextInput value={targetInput} onChangeText={setTargetInput} keyboardType="decimal-pad" placeholder="未设置目标" placeholderTextColor="#87958D" className="mb-6 border-b border-[#B8C9BE] py-3 text-base text-[#183C32]" />
+              <TouchableOpacity onPress={saveGoal} disabled={updateGoal.isPending} className="items-center rounded-full bg-[#183C32] py-4"><Text className="font-bold text-white">保存金额</Text></TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
   </SafeAreaView>;
 }

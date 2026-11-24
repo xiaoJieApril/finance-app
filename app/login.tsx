@@ -19,7 +19,7 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-[#F4F7F4]">
-      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView className="flex-1" contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 32 }} keyboardShouldPersistTaps="handled">
           <View className="mb-9 h-14 w-14 items-center justify-center rounded-2xl bg-[#183C32]">
             <Wallet size={27} color="#D7E979" strokeWidth={1.8} />
