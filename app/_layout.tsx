@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/reac
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as Updates from 'expo-updates';
 import React, { useEffect, useState } from 'react';
-import { AppState, LogBox, Platform } from 'react-native';
+import { ActivityIndicator, AppState, LogBox, Platform, Text, TouchableOpacity, View } from 'react-native';
 import { supabase } from '../services/supabase';
 import { getPendingCount, syncUser } from '../services/offlineStore';
 import { useSyncStore } from '../store/useSyncStore';
@@ -21,14 +21,81 @@ LogBox.ignoreLogs([
 const queryClient = new QueryClient();
 
 function AutoUpdateReloader() {
-  const { isUpdatePending } = Updates.useUpdates();
+  const { isChecking, isDownloading, isUpdateAvailable, isUpdatePending, downloadProgress, checkError, downloadError } = Updates.useUpdates();
+  const [retrying, setRetrying] = useState(false);
+  const [reloadFailed, setReloadFailed] = useState(false);
+  const reloadStarted = React.useRef(false);
+  const hasError = Boolean(checkError || downloadError || reloadFailed);
+  const visible = Platform.OS !== 'web' && Updates.isEnabled && (isChecking || isUpdateAvailable || isDownloading || isUpdatePending || hasError);
+  const progress = typeof downloadProgress === 'number' ? Math.max(0, Math.min(downloadProgress, 1)) : null;
 
   useEffect(() => {
-    if (Platform.OS === 'web' || __DEV__ || !Updates.isEnabled || !isUpdatePending) return;
-    void Updates.reloadAsync().catch(() => undefined);
+    if (Platform.OS === 'web' || __DEV__ || !Updates.isEnabled || !isUpdatePending || reloadStarted.current) return;
+    reloadStarted.current = true;
+    const timer = setTimeout(() => {
+      void Updates.reloadAsync().catch(() => {
+        reloadStarted.current = false;
+        setReloadFailed(true);
+      });
+    }, 1400);
+    return () => clearTimeout(timer);
   }, [isUpdatePending]);
 
-  return null;
+  const retry = async () => {
+    setRetrying(true);
+    setReloadFailed(false);
+    try {
+      const result = await Updates.checkForUpdateAsync();
+      if (result.isAvailable) {
+        await Updates.fetchUpdateAsync();
+        await Updates.reloadAsync();
+      }
+      else setRetrying(false);
+    } catch {
+      setReloadFailed(true);
+      setRetrying(false);
+    }
+  };
+
+  if (!visible) return null;
+  const title = hasError
+    ? '更新暂时无法完成'
+    : isUpdatePending
+      ? '更新已下载，正在切换到新版…'
+      : isDownloading
+        ? '发现新版本，正在下载…'
+        : isUpdateAvailable
+          ? '发现新版本，准备下载…'
+          : '正在检查更新…';
+  const subtitle = hasError
+    ? '请检查网络后重试。'
+    : isUpdatePending
+      ? '应用即将重新启动，请稍候。'
+      : isDownloading && progress !== null
+        ? `下载进度 ${Math.round(progress * 100)}%`
+        : isDownloading
+          ? '正在下载更新文件…'
+          : isUpdateAvailable
+            ? '正在准备更新文件…'
+            : '有可用更新时会自动下载。';
+
+  return (
+    <View pointerEvents="box-none" style={{ position: 'absolute', left: 0, right: 0, top: 54, alignItems: 'center', zIndex: 1000, elevation: 20 }}>
+      <View className="mx-4 w-[92%] rounded-2xl border border-[#DCE7E0] bg-white px-4 py-3 shadow-lg">
+        <View className="flex-row items-center">
+          <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-[#EAF1EC]">
+            {hasError ? <Text className="text-base font-bold text-[#B65C51]">!</Text> : isUpdatePending ? <Text className="text-sm font-bold text-[#477A60]">✓</Text> : <ActivityIndicator size="small" color="#477A60" />}
+          </View>
+          <View className="flex-1">
+            <Text className="text-sm font-bold text-[#183C32]">{title}</Text>
+            <Text className="mt-0.5 text-xs text-[#5D6D63]">{subtitle}</Text>
+          </View>
+          {hasError && <TouchableOpacity onPress={() => void retry()} disabled={retrying} className="ml-2 rounded-full bg-[#183C32] px-3 py-2"><Text className="text-xs font-bold text-white">{retrying ? '检查中' : '重试'}</Text></TouchableOpacity>}
+        </View>
+        {isDownloading && !hasError && <View className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#EAF1EC]">{progress !== null ? <View style={{ width: `${Math.max(progress * 100, 3)}%` }} className="h-full rounded-full bg-[#8CAE73]" /> : <View className="h-full w-1/3 rounded-full bg-[#8CAE73]" />}</View>}
+      </View>
+    </View>
+  );
 }
 
 function SyncCoordinator({ userId }: { userId: string | null }) {
